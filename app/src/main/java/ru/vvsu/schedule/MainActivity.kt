@@ -499,13 +499,13 @@ fun SelectorScreen(
     vm: MainViewModel,
     onBack: () -> Unit
 ) {
-
     var text by remember {
         mutableStateOf(
-            if (vm.mode == "group")
+            if (vm.mode == "group") {
                 vm.selectedGroup
-            else
+            } else {
                 vm.selectedTeacher
+            }
         )
     }
 
@@ -514,25 +514,24 @@ fun SelectorScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-
         Row(
             verticalAlignment = Alignment.CenterVertically
         ) {
-
             IconButton(
                 onClick = onBack
             ) {
                 Icon(
                     Icons.Default.ArrowBack,
-                    "Назад"
+                    contentDescription = "Назад"
                 )
             }
 
             Text(
-                if (vm.mode == "group")
+                if (vm.mode == "group") {
                     "Выбор группы"
-                else
-                    "Выбор преподавателя",
+                } else {
+                    "Выбор преподавателя"
+                },
                 style = MaterialTheme.typography.headlineSmall
             )
         }
@@ -547,18 +546,20 @@ fun SelectorScreen(
             modifier = Modifier.fillMaxWidth(),
             label = {
                 Text(
-                    if (vm.mode == "group")
+                    if (vm.mode == "group") {
                         "Название группы"
-                    else
+                    } else {
                         "ФИО преподавателя"
+                    }
                 )
             },
             placeholder = {
                 Text(
-                    if (vm.mode == "group")
+                    if (vm.mode == "group") {
                         "Например: БИС-24-1"
-                    else
+                    } else {
                         "Например: Иванов Иван Иванович"
+                    }
                 )
             },
             singleLine = true
@@ -568,7 +569,6 @@ fun SelectorScreen(
 
         Button(
             onClick = {
-
                 if (vm.mode == "group") {
                     vm.selectedGroup = text.trim()
                 } else {
@@ -594,10 +594,17 @@ fun SelectorScreen(
 
         Spacer(Modifier.height(16.dp))
 
-     OpenUrlButton("https://fort.vvsu.ru/openid/") {
-    Icon(Icons.Default.Login, null)
-    Spacer(Modifier.width(8.dp))
-    Text("Вход через ЛК ВВГУ")
+        OpenUrlButton("https://fort.vvsu.ru/openid/") {
+            Icon(
+                Icons.Default.Login,
+                contentDescription = null
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            Text("Вход через ЛК ВВГУ")
+        }
+    }
 }
 
 @Composable
