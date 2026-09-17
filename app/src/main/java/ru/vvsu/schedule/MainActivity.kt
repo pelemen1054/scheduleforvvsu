@@ -594,17 +594,10 @@ fun SelectorScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        OpenUrlButton("https://fort.vvsu.ru/openid/") {
+     OpenUrlButton("https://fort.vvsu.ru/openid/") {
     Icon(Icons.Default.Login, null)
     Spacer(Modifier.width(8.dp))
     Text("Вход через ЛК ВВГУ")
-}
-
-            Spacer(Modifier.width(8.dp))
-
-            Text("Вход через ЛК ВВГУ")
-        }
-    }
 }
 
 @Composable
