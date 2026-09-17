@@ -4,9 +4,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import javax.net.ssl.HostnameVerifier
+import javax.net.ssl.HttpsURLConnection
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 
 class VvsuRepository {
 
@@ -15,6 +22,56 @@ class VvsuRepository {
 
     private val portfolioUrl =
         "https://portfolio.vvsu.ru/"
+
+    /*
+     * ВРЕМЕННЫЙ ДИАГНОСТИЧЕСКИЙ РЕЖИМ.
+     *
+     * Он отключает проверку SSL-сертификатов, чтобы проверить,
+     * может ли приложение вообще получить страницу ВВГУ.
+     *
+     * НЕ ОСТАВЛЯТЬ В ФИНАЛЬНОЙ ВЕРСИИ!
+     */
+    private fun installTemporaryTrustAllCertificates() {
+
+        val trustAllCerts = arrayOf<TrustManager>(
+            object : X509TrustManager {
+
+                override fun getAcceptedIssuers(): Array<X509Certificate> {
+                    return emptyArray()
+                }
+
+                override fun checkClientTrusted(
+                    chain: Array<X509Certificate>,
+                    authType: String
+                ) {
+                }
+
+                override fun checkServerTrusted(
+                    chain: Array<X509Certificate>,
+                    authType: String
+                ) {
+                }
+            }
+        )
+
+        val sslContext = SSLContext.getInstance("TLS")
+
+        sslContext.init(
+            null,
+            trustAllCerts,
+            SecureRandom()
+        )
+
+        HttpsURLConnection.setDefaultSSLSocketFactory(
+            sslContext.socketFactory
+        )
+
+        HttpsURLConnection.setDefaultHostnameVerifier(
+            HostnameVerifier { _, _ ->
+                true
+            }
+        )
+    }
 
     suspend fun loadGroup(
         group: String
@@ -26,15 +83,44 @@ class VvsuRepository {
             return@withContext emptyList()
         }
 
+        /*
+         * ВРЕМЕННО:
+         * отключаем SSL-проверку перед запросом ВВГУ.
+         */
+        installTemporaryTrustAllCertificates()
+
         val doc = Jsoup.connect(timetableUrl)
             .userAgent(
                 "Mozilla/5.0 (Linux; Android 13) " +
                     "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
             )
-            .header("Accept-Language", "ru-RU,ru;q=0.9")
+            .header(
+                "Accept-Language",
+                "ru-RU,ru;q=0.9"
+            )
             .timeout(30_000)
             .followRedirects(true)
             .get()
+
+        /*
+         * Диагностика:
+         * если HTML действительно пришёл, приложение получит
+         * страницу ВВГУ.
+         */
+        android.util.Log.d(
+            "VVSU_TEST",
+            "ВВГУ загружен. HTML: ${doc.html().length} символов"
+        )
+
+        android.util.Log.d(
+            "VVSU_TEST",
+            "Заголовок страницы: ${doc.title()}"
+        )
+
+        android.util.Log.d(
+            "VVSU_TEST",
+            "URL: ${doc.location()}"
+        )
 
         parseGroupPage(
             doc = doc,
@@ -52,18 +138,36 @@ class VvsuRepository {
             return@withContext emptyList()
         }
 
+        /*
+         * ВРЕМЕННО отключаем SSL-проверку.
+         */
+        installTemporaryTrustAllCertificates()
+
         val teacherUrl = findTeacherUrl(cleanTeacher)
             ?: return@withContext emptyList()
+
+        android.util.Log.d(
+            "VVSU_TEST",
+            "Найдена страница преподавателя: $teacherUrl"
+        )
 
         val doc = Jsoup.connect(teacherUrl)
             .userAgent(
                 "Mozilla/5.0 (Linux; Android 13) " +
                     "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
             )
-            .header("Accept-Language", "ru-RU,ru;q=0.9")
+            .header(
+                "Accept-Language",
+                "ru-RU,ru;q=0.9"
+            )
             .timeout(30_000)
             .followRedirects(true)
             .get()
+
+        android.util.Log.d(
+            "VVSU_TEST",
+            "Страница преподавателя загружена. HTML: ${doc.html().length} символов"
+        )
 
         parseTeacherPage(
             doc = doc,
@@ -115,7 +219,9 @@ class VvsuRepository {
                 if (subject.isBlank()) continue
 
                 val type = cells
-                    .firstOrNull { isLessonType(it) }
+                    .firstOrNull {
+                        isLessonType(it)
+                    }
                     .orEmpty()
 
                 val room = cells
@@ -203,7 +309,14 @@ class VvsuRepository {
                     return partial.absUrl("href")
                 }
 
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+
+                android.util.Log.e(
+                    "VVSU_TEST",
+                    "Ошибка поиска преподавателя: ${e.message}",
+                    e
+                )
+
                 continue
             }
         }
