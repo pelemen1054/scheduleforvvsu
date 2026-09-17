@@ -2,6 +2,8 @@
 
 package ru.vvsu.schedule
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
