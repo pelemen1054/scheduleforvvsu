@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package ru.vvsu.schedule
 
 import android.os.Bundle
