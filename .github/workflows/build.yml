@@ -25,7 +25,10 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Build APK
-        run: gradle :app:assembleDebug --no-daemon
+        run: gradle wrapper --gradle-version 8.13
+
+      - name: Build APK
+        run: ./gradlew :app:assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
