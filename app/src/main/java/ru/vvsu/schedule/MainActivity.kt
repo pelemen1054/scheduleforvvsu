@@ -594,16 +594,11 @@ fun SelectorScreen(
 
         Spacer(Modifier.height(16.dp))
 
-        OutlinedButton(
-            onClick = {
-                openUrl("https://fort.vvsu.ru/openid/")
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(
-                Icons.Default.Login,
-                contentDescription = null
-            )
+        OpenUrlButton("https://fort.vvsu.ru/openid/") {
+    Icon(Icons.Default.Login, null)
+    Spacer(Modifier.width(8.dp))
+    Text("Вход через ЛК ВВГУ")
+}
 
             Spacer(Modifier.width(8.dp))
 
@@ -810,22 +805,11 @@ fun SettingsScreen(
 
         Spacer(Modifier.height(12.dp))
 
-        OutlinedButton(
-            onClick = {
-                openUrl("https://www.vvsu.ru/")
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-
-            Icon(
-                Icons.Default.Language,
-                null
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            Text("Официальный сайт ВВГУ")
-        }
+       OpenUrlButton("https://www.vvsu.ru/") {
+    Icon(Icons.Default.Language, null)
+    Spacer(Modifier.width(8.dp))
+    Text("Официальный сайт ВВГУ")
+}
 
         Spacer(Modifier.height(16.dp))
 
@@ -836,9 +820,24 @@ fun SettingsScreen(
     }
 }
 
-fun openUrl(url: String) {
-    // Используем обычный браузер, чтобы авторизация
-    // проходила непосредственно на официальном сайте ВВГУ.
+@Composable
+fun OpenUrlButton(
+    url: String,
+    content: @Composable RowScope.() -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    Button(
+        onClick = {
+            context.startActivity(
+                Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse(url)
+                )
+            )
+        },
+        content = content
+    )
 }
 
 class MainActivity : ComponentActivity() {
