@@ -21,14 +21,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v5
+      - name: Download Gradle 8.13
+        run: |
+          wget https://services.gradle.org/distributions/gradle-8.13-bin.zip
+          unzip -q gradle-8.13-bin.zip -d "$HOME/gradle"
 
       - name: Build APK
-        run: gradle wrapper --gradle-version 8.13
-
-      - name: Build APK
-        run: ./gradlew :app:assembleDebug --no-daemon
+        run: |
+          "$HOME/gradle/gradle-8.13/bin/gradle" :app:assembleDebug --no-daemon
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
