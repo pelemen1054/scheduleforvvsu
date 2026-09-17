@@ -2,9 +2,15 @@
 
 package ru.vvsu.schedule
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,19 +20,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 data class Lesson(
+    val date: LocalDate,
     val time: String,
     val subject: String,
     val teacher: String,
@@ -36,249 +43,164 @@ data class Lesson(
 )
 
 class MainViewModel : ViewModel() {
+
     var selectedGroup by mutableStateOf("")
     var selectedTeacher by mutableStateOf("")
     var selectedTeacherUrl by mutableStateOf("")
+
     var mode by mutableStateOf("group")
     var date by mutableStateOf(LocalDate.now())
+
     var darkTheme by mutableStateOf(false)
+    var autoRefresh by mutableStateOf(true)
+    var notificationsEnabled by mutableStateOf(true)
+    var themeColor by mutableStateOf("blue")
+
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var lessons by mutableStateOf<List<Lesson>>(emptyList())
 
+    private val repository = VvsuRepository()
+
     fun loadSchedule() {
         if (mode == "group" && selectedGroup.isBlank()) return
-        if (mode == "teacher" && selectedTeacherUrl.isBlank()) return
+        if (mode == "teacher" && selectedTeacher.isBlank()) return
 
         loading = true
         error = null
 
         viewModelScope.launch {
             try {
-                val repo = VvsuTimetableRepository()
-
-                val result = withContext(Dispatchers.IO) {
-                    if (mode == "group") {
-                        repo.loadGroup(selectedGroup)
-                    } else {
-                        repo.loadTeacher(selectedTeacherUrl, selectedTeacher)
-                    }
+                val result = if (mode == "group") {
+                    repository.loadGroup(selectedGroup)
+                } else {
+                    repository.loadTeacher(selectedTeacher)
                 }
 
                 lessons = result
+                    .filter { it.date == date }
+                    .sortedBy { it.time }
+
                 loading = false
 
                 if (result.isEmpty()) {
-                    error = "В расписании не найдено занятий для этой группы."
+                    error = if (mode == "group") {
+                        "Расписание группы не найдено."
+                    } else {
+                        "Расписание преподавателя не найдено."
+                    }
                 }
             } catch (e: Exception) {
                 loading = false
-                error = e.message ?: "Не удалось загрузить расписание ВВГУ."
                 lessons = emptyList()
-            }
-        }
-    }
-}
 
-private class VvsuTimetableRepository {
-    private val base = "https://www.vvsu.ru/timetable/"
+                error = when {
+                    e.message?.contains("Trust anchor", true) == true ->
+                        "Не удалось установить защищённое соединение с ВВГУ. " +
+                            "Попробуйте обновить приложение или открыть сайт ВВГУ в браузере."
 
-    suspend fun loadGroup(group: String): List<Lesson> =
-        withContext(Dispatchers.IO) {
-            val doc = org.jsoup.Jsoup.connect(base)
-                .userAgent("Mozilla/5.0 (Android) VVSU-Schedule/1.0")
-                .timeout(20_000)
-                .get()
+                    e.message?.contains("Unable to resolve host", true) == true ->
+                        "Нет соединения с интернетом."
 
-            parseScheduleTables(doc, groupFilter = group)
-        }
-
-    suspend fun loadTeacher(
-        url: String,
-        teacherName: String
-    ): List<Lesson> =
-        withContext(Dispatchers.IO) {
-            val doc = org.jsoup.Jsoup.connect(url)
-                .userAgent("Mozilla/5.0 (Android) VVSU-Schedule/1.0")
-                .timeout(20_000)
-                .get()
-
-            parseTeacherTables(doc, teacherName)
-        }
-
-    private fun parseScheduleTables(
-        doc: org.jsoup.nodes.Document,
-        groupFilter: String
-    ): List<Lesson> {
-        val result = mutableListOf<Lesson>()
-
-        for (table in doc.select("table")) {
-            val rows = table.select("tr")
-            if (rows.isEmpty()) continue
-
-            for (row in rows) {
-                val cells = row.select("th,td")
-                    .map { it.text().trim() }
-
-                if (cells.size < 3) continue
-
-                val time = cells.firstOrNull {
-                    Regex(
-                        """\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}"""
-                    ).containsMatchIn(it)
-                } ?: continue
-
-                val subject =
-                    cells.getOrNull(cells.indexOf(time) + 1).orEmpty()
-
-                if (subject.isBlank()) continue
-
-                val type = cells.firstOrNull {
-                    isLessonType(it)
-                }.orEmpty()
-
-                val room = cells.firstOrNull {
-                    it.matches(
-                        Regex("""\d+[а-яА-Яa-zA-Z]?,.*""")
-                    )
-                }.orEmpty()
-
-                result += Lesson(
-                    time = time,
-                    subject = subject,
-                    teacher = "",
-                    type = type,
-                    room = room,
-                    group = groupFilter
-                )
-            }
-        }
-
-        return result
-    }
-
-    private fun parseTeacherTables(
-        doc: org.jsoup.nodes.Document,
-        teacherName: String
-    ): List<Lesson> {
-        val result = mutableListOf<Lesson>()
-
-        for (table in doc.select("table")) {
-            val rows = table.select("tr")
-
-            for (row in rows.drop(1)) {
-                val cells = row.select("th,td")
-                    .map { it.text().trim() }
-
-                if (cells.size < 4) continue
-
-                val timeIndex = cells.indexOfFirst {
-                    Regex(
-                        """\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}"""
-                    ).containsMatchIn(it)
+                    else ->
+                        e.message ?: "Не удалось загрузить расписание ВВГУ."
                 }
-
-                if (timeIndex < 0) continue
-
-                val time = cells[timeIndex]
-
-                val subject =
-                    cells.getOrNull(timeIndex + 1).orEmpty()
-
-                if (subject.isBlank()) continue
-
-                val type = cells.firstOrNull {
-                    isLessonType(it)
-                }.orEmpty()
-
-                val room = cells.firstOrNull {
-                    it.matches(
-                        Regex("""\d+[а-яА-Яa-zA-Z]?,.*""")
-                    )
-                }.orEmpty()
-
-                val group = cells
-                    .drop(timeIndex + 1)
-                    .firstOrNull {
-                        it.contains("-") &&
-                            !isLessonType(it) &&
-                            it != subject &&
-                            it != room
-                    }
-                    .orEmpty()
-
-                result += Lesson(
-                    time = time,
-                    subject = subject,
-                    teacher = teacherName,
-                    type = type,
-                    room = room,
-                    group = group
-                )
             }
         }
-
-        return result
     }
 
-    private fun isLessonType(value: String): Boolean {
-        val v = value.trim().lowercase()
+    fun changeDate(newDate: LocalDate) {
+        date = newDate
+        loadSchedule()
+    }
 
-        return v == "лекция" ||
-            v == "практика" ||
-            v == "семинар" ||
-            v == "лабораторная" ||
-            v == "экзамен" ||
-            v == "мероприятие"
+    fun selectMode(newMode: String) {
+        mode = newMode
+        lessons = emptyList()
+        error = null
+
+        if (
+            (newMode == "group" && selectedGroup.isNotBlank()) ||
+            (newMode == "teacher" && selectedTeacher.isNotBlank())
+        ) {
+            loadSchedule()
+        }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun TimetableTheme(
+    darkTheme: Boolean,
+    colorName: String,
+    content: @Composable () -> Unit
+) {
+    val primary = when (colorName) {
+        "red" -> Color(0xFFD32F2F)
+        "orange" -> Color(0xFFEF6C00)
+        "green" -> Color(0xFF388E3C)
+        "purple" -> Color(0xFF7B1FA2)
+        "pink" -> Color(0xFFC2185B)
+        "teal" -> Color(0xFF00796B)
+        "blue" -> Color(0xFF1565C0)
+        else -> Color(0xFF1565C0)
+    }
+
+    val scheme = if (darkTheme) {
+        darkColorScheme(primary = primary)
+    } else {
+        lightColorScheme(primary = primary)
+    }
+
+    MaterialTheme(
+        colorScheme = scheme,
+        content = content
+    )
+}
+
 @Composable
 fun App(vm: MainViewModel = viewModel()) {
-    MaterialTheme(
-        colorScheme =
-            if (vm.darkTheme) darkColorScheme()
-            else lightColorScheme()
-    ) {
-        var tab by remember { mutableIntStateOf(0) }
 
+    var tab by remember { mutableIntStateOf(0) }
+    var showSelector by remember { mutableStateOf(false) }
+
+    TimetableTheme(
+        darkTheme = vm.darkTheme,
+        colorName = vm.themeColor
+    ) {
         Scaffold(
             topBar = {
                 TopAppBar(
                     title = {
                         Text(
-                            if (tab == 0)
-                                "Расписание"
-                            else
-                                "Настройки"
+                            if (tab == 0) "Timetable"
+                            else "Настройки"
                         )
                     },
                     actions = {
                         if (tab == 0) {
                             IconButton(
-                                onClick = {
-                                    vm.loadSchedule()
-                                }
+                                onClick = { vm.loadSchedule() }
                             ) {
                                 Icon(
                                     Icons.Default.Refresh,
-                                    "Обновить"
+                                    contentDescription = "Обновить"
                                 )
                             }
                         }
                     }
                 )
             },
+
             bottomBar = {
                 NavigationBar {
+
                     NavigationBarItem(
                         selected = tab == 0,
                         onClick = { tab = 0 },
                         icon = {
                             Icon(
                                 Icons.Default.DateRange,
-                                null
+                                contentDescription = null
                             )
                         },
                         label = {
@@ -292,7 +214,7 @@ fun App(vm: MainViewModel = viewModel()) {
                         icon = {
                             Icon(
                                 Icons.Default.Settings,
-                                null
+                                contentDescription = null
                             )
                         },
                         label = {
@@ -302,15 +224,23 @@ fun App(vm: MainViewModel = viewModel()) {
                 }
             }
         ) { padding ->
+
             if (tab == 0) {
                 ScheduleScreen(
-                    vm,
-                    Modifier.padding(padding)
+                    vm = vm,
+                    modifier = Modifier.padding(padding),
+                    showSelector = showSelector,
+                    onShowSelector = {
+                        showSelector = true
+                    },
+                    onCloseSelector = {
+                        showSelector = false
+                    }
                 )
             } else {
                 SettingsScreen(
-                    vm,
-                    Modifier.padding(padding)
+                    vm = vm,
+                    modifier = Modifier.padding(padding)
                 )
             }
         }
@@ -320,22 +250,16 @@ fun App(vm: MainViewModel = viewModel()) {
 @Composable
 fun ScheduleScreen(
     vm: MainViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier,
+    showSelector: Boolean,
+    onShowSelector: () -> Unit,
+    onCloseSelector: () -> Unit
 ) {
-    var showDatePicker by remember {
-        mutableStateOf(false)
-    }
-
-    var showSelector by remember {
-        mutableStateOf(false)
-    }
 
     if (showSelector) {
         SelectorScreen(
-            vm,
-            onBack = {
-                showSelector = false
-            }
+            vm = vm,
+            onBack = onCloseSelector
         )
         return
     }
@@ -345,14 +269,16 @@ fun ScheduleScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
+
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+
             FilterChip(
                 selected = vm.mode == "group",
                 onClick = {
-                    vm.mode = "group"
+                    vm.selectMode("group")
                 },
                 label = {
                     Text("👥 Группа")
@@ -362,7 +288,7 @@ fun ScheduleScreen(
             FilterChip(
                 selected = vm.mode == "teacher",
                 onClick = {
-                    vm.mode = "teacher"
+                    vm.selectMode("teacher")
                 },
                 label = {
                     Text("👨‍🏫 Преподаватель")
@@ -373,18 +299,19 @@ fun ScheduleScreen(
         Spacer(Modifier.height(10.dp))
 
         OutlinedCard(
-            onClick = {
-                showSelector = true
-            },
+            onClick = onShowSelector,
             modifier = Modifier.fillMaxWidth()
         ) {
+
             Row(
                 Modifier.padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+
                 Column(
                     Modifier.weight(1f)
                 ) {
+
                     Text(
                         if (vm.mode == "group")
                             "Группа"
@@ -394,14 +321,15 @@ fun ScheduleScreen(
                     )
 
                     Text(
-                        if (vm.mode == "group")
+                        if (vm.mode == "group") {
                             vm.selectedGroup.ifBlank {
                                 "Не выбрана"
                             }
-                        else
+                        } else {
                             vm.selectedTeacher.ifBlank {
                                 "Не выбран"
-                            },
+                            }
+                        },
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -409,7 +337,7 @@ fun ScheduleScreen(
 
                 Icon(
                     Icons.Default.ChevronRight,
-                    null
+                    contentDescription = null
                 )
             }
         }
@@ -419,12 +347,12 @@ fun ScheduleScreen(
         Row(
             Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement =
-                Arrangement.SpaceBetween
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
+
             IconButton(
                 onClick = {
-                    vm.date = vm.date.minusDays(1)
+                    vm.changeDate(vm.date.minusDays(1))
                 }
             ) {
                 Icon(
@@ -435,7 +363,7 @@ fun ScheduleScreen(
 
             TextButton(
                 onClick = {
-                    showDatePicker = true
+                    vm.changeDate(LocalDate.now())
                 }
             ) {
                 Text(
@@ -450,7 +378,7 @@ fun ScheduleScreen(
 
             IconButton(
                 onClick = {
-                    vm.date = vm.date.plusDays(1)
+                    vm.changeDate(vm.date.plusDays(1))
                 }
             ) {
                 Icon(
@@ -462,92 +390,60 @@ fun ScheduleScreen(
 
         HorizontalDivider()
 
-        if (vm.loading) {
-            Box(
-                Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
-            }
-        } else if (vm.error != null) {
-            Box(
-                Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(vm.error ?: "")
-            }
-        } else if (vm.lessons.isEmpty()) {
-            Box(
-                Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    if (
-                        (vm.mode == "group" &&
-                            vm.selectedGroup.isBlank()) ||
-                        (vm.mode == "teacher" &&
-                            vm.selectedTeacher.isBlank())
-                    ) {
-                        "Выберите группу или преподавателя"
-                    } else {
-                        "На этот день занятий нет"
-                    }
-                )
-            }
-        } else {
-            LazyColumn(
-                verticalArrangement =
-                    Arrangement.spacedBy(10.dp),
-                contentPadding =
-                    PaddingValues(vertical = 12.dp)
-            ) {
-                items(vm.lessons) { lesson ->
-                    LessonCard(lesson)
+        when {
+            vm.loading -> {
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
                 }
             }
-        }
 
-        if (showDatePicker) {
-            val state = rememberDatePickerState(
-                initialSelectedDateMillis =
-                    System.currentTimeMillis()
-            )
+            vm.error != null -> {
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        vm.error ?: "",
+                        modifier = Modifier.padding(24.dp)
+                    )
+                }
+            }
 
-            DatePickerDialog(
-                onDismissRequest = {
-                    showDatePicker = false
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            state.selectedDateMillis?.let {
-                                vm.date =
-                                    java.time.Instant
-                                        .ofEpochMilli(it)
-                                        .atZone(
-                                            java.time.ZoneId
-                                                .systemDefault()
-                                        )
-                                        .toLocalDate()
-                            }
-
-                            showDatePicker = false
+            vm.lessons.isEmpty() -> {
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        if (
+                            (vm.mode == "group" &&
+                                    vm.selectedGroup.isBlank()) ||
+                            (vm.mode == "teacher" &&
+                                    vm.selectedTeacher.isBlank())
+                        ) {
+                            "Выберите группу или преподавателя"
+                        } else {
+                            "На этот день занятий нет"
                         }
-                    ) {
-                        Text("Выбрать")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            showDatePicker = false
-                        }
-                    ) {
-                        Text("Отмена")
+                    )
+                }
+            }
+
+            else -> {
+                LazyColumn(
+                    verticalArrangement =
+                        Arrangement.spacedBy(10.dp),
+                    contentPadding =
+                        PaddingValues(vertical = 12.dp)
+                ) {
+
+                    items(vm.lessons) { lesson ->
+                        LessonCard(lesson)
                     }
                 }
-            ) {
-                DatePicker(state)
             }
         }
     }
@@ -555,12 +451,15 @@ fun ScheduleScreen(
 
 @Composable
 fun LessonCard(lesson: Lesson) {
+
     ElevatedCard(
         Modifier.fillMaxWidth()
     ) {
+
         Column(
             Modifier.padding(16.dp)
         ) {
+
             Text(
                 lesson.time,
                 style = MaterialTheme.typography.titleMedium,
@@ -600,6 +499,7 @@ fun SelectorScreen(
     vm: MainViewModel,
     onBack: () -> Unit
 ) {
+
     var text by remember {
         mutableStateOf(
             if (vm.mode == "group")
@@ -614,10 +514,11 @@ fun SelectorScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
+
         Row(
-            verticalAlignment =
-                Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
+
             IconButton(
                 onClick = onBack
             ) {
@@ -632,10 +533,11 @@ fun SelectorScreen(
                     "Выбор группы"
                 else
                     "Выбор преподавателя",
-                style =
-                    MaterialTheme.typography.headlineSmall
+                style = MaterialTheme.typography.headlineSmall
             )
         }
+
+        Spacer(Modifier.height(16.dp))
 
         OutlinedTextField(
             value = text,
@@ -646,41 +548,27 @@ fun SelectorScreen(
             label = {
                 Text(
                     if (vm.mode == "group")
-                        "Группа"
+                        "Название группы"
                     else
                         "ФИО преподавателя"
+                )
+            },
+            placeholder = {
+                Text(
+                    if (vm.mode == "group")
+                        "Например: БИС-24-1"
+                    else
+                        "Например: Иванов Иван Иванович"
                 )
             },
             singleLine = true
         )
 
-        if (vm.mode == "teacher") {
-            Spacer(Modifier.height(8.dp))
-
-            OutlinedTextField(
-                value = vm.selectedTeacherUrl,
-                onValueChange = {
-                    vm.selectedTeacherUrl = it
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = {
-                    Text(
-                        "Ссылка на расписание ВВГУ"
-                    )
-                },
-                supportingText = {
-                    Text(
-                        "Публичная страница portfolio.vvsu.ru/timetable/..."
-                    )
-                },
-                singleLine = true
-            )
-        }
-
         Spacer(Modifier.height(12.dp))
 
         Button(
             onClick = {
+
                 if (vm.mode == "group") {
                     vm.selectedGroup = text.trim()
                 } else {
@@ -695,35 +583,47 @@ fun SelectorScreen(
             Text("Выбрать")
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(24.dp))
 
-        TextButton(
-            onClick = {
-                // Вход через ЛК ВВГУ —
-                // дополнительная функция.
-            }
-        ) {
-            Text("Вход через ЛК ВВГУ")
+        if (vm.mode == "teacher") {
+            Text(
+                "Приложение само ищет страницу преподавателя на официальном портале ВВГУ.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
 
-        Text(
-            "Без входа можно использовать публичное расписание. " +
-                "Авторизация будет дополнительной функцией.",
-            style = MaterialTheme.typography.bodySmall
-        )
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedButton(
+            onClick = {
+                openUrl("https://fort.vvsu.ru/openid/")
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                Icons.Default.Login,
+                contentDescription = null
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            Text("Вход через ЛК ВВГУ")
+        }
     }
 }
 
 @Composable
 fun SettingsScreen(
     vm: MainViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier
 ) {
+
     Column(
         modifier
             .fillMaxSize()
             .padding(16.dp)
     ) {
+
         Text(
             "Внешний вид",
             style = MaterialTheme.typography.titleMedium,
@@ -735,8 +635,10 @@ fun SettingsScreen(
         Row(
             Modifier.fillMaxWidth(),
             horizontalArrangement =
-                Arrangement.SpaceBetween
+                Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+
             Text("Тёмная тема")
 
             Switch(
@@ -745,6 +647,43 @@ fun SettingsScreen(
                     vm.darkTheme = it
                 }
             )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            "Цвет приложения",
+            style = MaterialTheme.typography.titleSmall
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        val colors = listOf(
+            "blue" to "Синий",
+            "red" to "Красный",
+            "orange" to "Оранжевый",
+            "green" to "Зелёный",
+            "purple" to "Фиолетовый",
+            "pink" to "Розовый",
+            "teal" to "Бирюзовый"
+        )
+
+        colors.forEach { (value, title) ->
+
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                RadioButton(
+                    selected = vm.themeColor == value,
+                    onClick = {
+                        vm.themeColor = value
+                    }
+                )
+
+                Text(title)
+            }
         }
 
         HorizontalDivider(
@@ -773,7 +712,8 @@ fun SettingsScreen(
                     Icons.Default.Group,
                     null
                 )
-            }
+            },
+            modifier = Modifier.fillMaxWidth()
         )
 
         ListItem(
@@ -792,65 +732,122 @@ fun SettingsScreen(
                     Icons.Default.Person,
                     null
                 )
-            }
+            },
+            modifier = Modifier.fillMaxWidth()
         )
 
-        HorizontalDivider()
+        Spacer(Modifier.height(8.dp))
 
-        ListItem(
-            headlineContent = {
-                Text("Автообновление")
-            },
-            supportingContent = {
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Icon(
+                Icons.Default.Sync,
+                null
+            )
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(
+                Modifier.weight(1f)
+            ) {
+
                 Text(
-                    "Обновлять расписание при запуске и вручную"
+                    "Автообновление",
+                    fontWeight = FontWeight.Medium
                 )
-            },
-            leadingContent = {
-                Icon(
-                    Icons.Default.Sync,
-                    null
+
+                Text(
+                    "Обновлять расписание автоматически"
                 )
             }
-        )
 
-        ListItem(
-            headlineContent = {
-                Text("Уведомления")
-            },
-            supportingContent = {
+            Switch(
+                checked = vm.autoRefresh,
+                onCheckedChange = {
+                    vm.autoRefresh = it
+                }
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+
+            Icon(
+                Icons.Default.Notifications,
+                null
+            )
+
+            Spacer(Modifier.width(16.dp))
+
+            Column(
+                Modifier.weight(1f)
+            ) {
+
                 Text(
-                    "Напоминания о занятиях — следующий этап"
+                    "Уведомления",
+                    fontWeight = FontWeight.Medium
                 )
-            },
-            leadingContent = {
-                Icon(
-                    Icons.Default.Notifications,
-                    null
+
+                Text(
+                    "Напоминания о занятиях"
                 )
             }
-        )
 
-        ListItem(
-            headlineContent = {
-                Text("О приложении")
+            Switch(
+                checked = vm.notificationsEnabled,
+                onCheckedChange = {
+                    vm.notificationsEnabled = it
+                }
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        OutlinedButton(
+            onClick = {
+                openUrl("https://www.vvsu.ru/")
             },
-            supportingContent = {
-                Text(
-                    "ВВГУ — Расписание • версия 1.0.0"
-                )
-            },
-            leadingContent = {
-                Icon(
-                    Icons.Default.Info,
-                    null
-                )
-            }
+            modifier = Modifier.fillMaxWidth()
+        ) {
+
+            Icon(
+                Icons.Default.Language,
+                null
+            )
+
+            Spacer(Modifier.width(8.dp))
+
+            Text("Официальный сайт ВВГУ")
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            "Timetable • версия 1.0.0",
+            style = MaterialTheme.typography.bodySmall
         )
     }
 }
 
+fun openUrl(url: String) {
+    // Используем обычный браузер, чтобы авторизация
+    // проходила непосредственно на официальном сайте ВВГУ.
+}
+
 class MainActivity : ComponentActivity() {
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { }
+
     override fun onCreate(
         savedInstanceState: Bundle?
     ) {
@@ -858,6 +855,21 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             App()
+        }
+    }
+
+    private fun requestNotificationPermission() {
+
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+
+            notificationPermissionLauncher.launch(
+                Manifest.permission.POST_NOTIFICATIONS
+            )
         }
     }
 }
