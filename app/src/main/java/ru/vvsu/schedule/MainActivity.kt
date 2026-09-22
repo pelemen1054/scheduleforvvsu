@@ -61,18 +61,14 @@ class MainViewModel : ViewModel() {
 
     var mode by mutableStateOf("group")
     var date by mutableStateOf(LocalDate.now())
-
+    
     var darkTheme by mutableStateOf(false)
-        private set
 
     var autoRefresh by mutableStateOf(true)
-        private set
 
     var notificationsEnabled by mutableStateOf(true)
-        private set
 
     var themeColor by mutableStateOf("blue")
-        private set
 
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
