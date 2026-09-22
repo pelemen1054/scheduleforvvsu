@@ -12,6 +12,7 @@
         android:icon="@drawable/ic_launcher"
         android:label="Timetable"
         android:supportsRtl="true"
+        android:usesCleartextTraffic="false"
         android:theme="@style/Theme.VVSUSchedule">
 
         <activity
