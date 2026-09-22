@@ -1054,7 +1054,7 @@ fun SettingsScreen(
                     vm.darkTheme,
 
                 onCheckedChange = {
-                    vm.setDarkTheme(it)
+                    vm.updateDarkTheme(it)
                 }
             )
         }
@@ -1124,7 +1124,7 @@ fun SettingsScreen(
 
                         onClick = {
 
-                            vm.setThemeColor(value)
+                            vm.updateThemeColor(value)
                             expanded = false
                         }
                     )
@@ -1267,7 +1267,7 @@ fun SettingsScreen(
                     vm.autoRefresh,
 
                 onCheckedChange = {
-                    vm.setAutoRefresh(it)
+                    vm.updateAutoRefresh(it)
                 }
             )
         }
