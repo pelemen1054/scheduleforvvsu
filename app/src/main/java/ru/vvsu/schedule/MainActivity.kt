@@ -79,12 +79,6 @@ class MainViewModel : ViewModel() {
     var lessons by mutableStateOf<List<Lesson>>(emptyList())
 
     private val repository = VvsuRepository()
-    
-    var loading by mutableStateOf(false)
-    var error by mutableStateOf<String?>(null)
-    var lessons by mutableStateOf<List<Lesson>>(emptyList())
-
-    private val repository = VvsuRepository()
 
     fun init(context: Context) {
 
