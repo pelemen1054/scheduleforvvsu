@@ -62,21 +62,23 @@ class MainViewModel : ViewModel() {
     var mode by mutableStateOf("group")
     var date by mutableStateOf(LocalDate.now())
 
-    var darkTheme by mutableStateOf(prefs.getBoolean("darkTheme", false))
+    var darkTheme by mutableStateOf(false)
         private set
 
-    var autoRefresh by mutableStateOf(prefs.getBoolean("autoRefresh", true))
+    var autoRefresh by mutableStateOf(true)
         private set
 
-    var notificationsEnabled by mutableStateOf(
-        prefs.getBoolean("notificationsEnabled", true)
-    )
+    var notificationsEnabled by mutableStateOf(true)
         private set
 
-    var themeColor by mutableStateOf(
-        prefs.getString("themeColor", "blue") ?: "blue"
-    )
+    var themeColor by mutableStateOf("blue")
         private set
+
+    var loading by mutableStateOf(false)
+    var error by mutableStateOf<String?>(null)
+    var lessons by mutableStateOf<List<Lesson>>(emptyList())
+
+    private val repository = VvsuRepository()
     
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
