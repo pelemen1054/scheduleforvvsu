@@ -998,7 +998,8 @@ fun SettingsScreen(
     onSelectTeacher: () -> Unit,
     onLogin: () -> Unit
 ) {
-
+    val context = LocalContext.current
+    
     Column(
         modifier
             .fillMaxSize()
