@@ -872,7 +872,8 @@ fun SelectorScreen(
     onBack: () -> Unit,
     onLogin: () -> Unit
 ) {
-
+    val context = LocalContext.current
+    
     var text by remember {
 
         mutableStateOf(
@@ -1337,18 +1338,12 @@ fun SettingsScreen(
 
         Button(
             onClick = {
-
-                val intent =
-                    android.content.Intent(
-                        android.content.Intent.ACTION_VIEW,
-                        android.net.Uri.parse(
-                            "https://www.vvsu.ru/"
-                        )
-                    )
-
-                LocalContext.current.startActivity(
-                    intent
-                )
+    val intent = Intent(
+        Intent.ACTION_VIEW,
+        Uri.parse("https://www.vvsu.ru/")
+    )
+    context.startActivity(intent)
+}
             },
 
             modifier =
