@@ -126,24 +126,24 @@ class MainViewModel : ViewModel() {
             ?.apply()
     }
 
-    fun setDarkTheme(value: Boolean) {
-        darkTheme = value
-        saveSettings()
+    fun updateDarkTheme(value: Boolean) {
+    darkTheme = value
+    saveSettings()
     }
 
-    fun setThemeColor(value: String) {
-        themeColor = value
-        saveSettings()
+    fun updateThemeColor(value: String) {
+    themeColor = value
+    saveSettings()
     }
 
-    fun setAutoRefresh(value: Boolean) {
-        autoRefresh = value
-        saveSettings()
+    fun updateAutoRefresh(value: Boolean) {
+    autoRefresh = value
+    saveSettings()
     }
 
     fun setNotifications(value: Boolean) {
-        notificationsEnabled = value
-        saveSettings()
+    notificationsEnabled = value
+    saveSettings()
     }
 
     fun setGroup(value: String) {
