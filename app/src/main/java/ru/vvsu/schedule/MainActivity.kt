@@ -3,6 +3,8 @@
 package ru.vvsu.schedule
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
@@ -1338,18 +1340,14 @@ fun SettingsScreen(
 
         Button(
             onClick = {
-    val intent = Intent(
-        Intent.ACTION_VIEW,
-        Uri.parse("https://www.vvsu.ru/")
-    )
-    context.startActivity(intent)
-}
+                val intent = Intent(
+                    Intent.ACTION_VIEW,
+                    Uri.parse("https://www.vvsu.ru/")
+                )
+                context.startActivity(intent)
             },
-
-            modifier =
-                Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth()
         ) {
-
             Icon(
                 Icons.Default.Language,
                 null
@@ -1364,16 +1362,6 @@ fun SettingsScreen(
 
         Spacer(
             Modifier.height(16.dp)
-        )
-
-        Text(
-            "Timetable • версия 1.0.0",
-            style =
-                MaterialTheme.typography.bodySmall
-        )
-
-        Spacer(
-            Modifier.height(32.dp)
         )
     }
 }
