@@ -176,86 +176,137 @@ class VvsuRepository {
     }
 
     private fun parseGroupPage(
-        doc: Document,
-        group: String
-    ): List<Lesson> {
+    doc: Document,
+    group: String
+): List<Lesson> {
 
-        val result = mutableListOf<Lesson>()
+    val result = mutableListOf<Lesson>()
 
-        for (table in doc.select("table")) {
+    val dateRegex = Regex(
+        "\\d{1,2}\\.\\d{1,2}\\.\\d{4}"
+    )
 
-            for (row in table.select("tr")) {
+    val timeRegex = Regex(
+        "\\d{1,2}:\\d{2}\\s*-\\s*\\d{1,2}:\\d{2}"
+    )
 
-                val cells = row
-                    .select("th,td")
-                    .map {
-                        it.text()
-                            .replace(Regex("\\s+"), " ")
-                            .trim()
-                    }
+    var currentDate: LocalDate? = null
 
-                if (cells.isEmpty()) continue
+    for (table in doc.select("table")) {
 
-                val fullText = cells.joinToString(" ")
+        for (row in table.select("tr")) {
 
-                if (!fullText.contains(group, ignoreCase = true)) {
-                    continue
+            val cells = row
+                .select("th,td")
+                .map {
+                    it.text()
+                        .replace(Regex("\\s+"), " ")
+                        .trim()
                 }
+                .filter { it.isNotBlank() }
 
-                val timeIndex = cells.indexOfFirst {
-                    Regex(
-                        "\\d{1,2}:\\d{2}\\s*-\\s*\\d{1,2}:\\d{2}"
-                    ).containsMatchIn(it)
+            if (cells.isEmpty()) continue
+
+            val fullText = cells.joinToString(" ")
+
+            // Ищем дату в строке
+            val dateMatch = dateRegex.find(fullText)
+
+            if (dateMatch != null) {
+                currentDate = try {
+                    LocalDate.parse(
+                        dateMatch.value,
+                        DateTimeFormatter.ofPattern(
+                            "d.M.yyyy",
+                            Locale("ru")
+                        )
+                    )
+                } catch (_: Exception) {
+                    currentDate
                 }
-
-                if (timeIndex < 0) continue
-
-                val time = cells[timeIndex]
-
-                val subject = cells
-                    .getOrNull(timeIndex + 1)
-                    .orEmpty()
-
-                if (subject.isBlank()) continue
-
-                val type = cells
-                    .firstOrNull {
-                        isLessonType(it)
-                    }
-                    .orEmpty()
-
-                val room = cells
-                    .firstOrNull {
-                        Regex(
-                            "\\d+[А-Яа-яA-Za-z]?,\\s*.+"
-                        ).matches(it)
-                    }
-                    .orEmpty()
-
-                val teacher = cells
-                    .firstOrNull {
-                        it.contains(" ")
-                            && !isLessonType(it)
-                            && it != subject
-                            && it != room
-                            && !it.contains(group, true)
-                    }
-                    .orEmpty()
-
-                result += Lesson(
-                    date = LocalDate.now(),
-                    time = time,
-                    subject = subject,
-                    teacher = teacher,
-                    type = type,
-                    room = room,
-                    group = group
-                )
             }
-        }
 
-        return result
+            val date = currentDate ?: continue
+
+            // Строка должна относиться к выбранной группе
+            if (!fullText.contains(group, ignoreCase = true)) {
+                continue
+            }
+
+            // Ищем время
+            val timeIndex = cells.indexOfFirst {
+                timeRegex.containsMatchIn(it)
+            }
+
+            if (timeIndex < 0) continue
+
+            val time = timeRegex
+                .find(cells[timeIndex])
+                ?.value
+                ?: continue
+
+            // Следующая ячейка после времени — дисциплина
+            val subjectIndex = timeIndex + 1
+
+            if (subjectIndex >= cells.size) continue
+
+            val subject = cells[subjectIndex]
+
+            if (
+                subject.isBlank() ||
+                isLessonType(subject)
+            ) {
+                continue
+            }
+
+            // Тип занятия
+            val type = cells
+                .firstOrNull {
+                    isLessonType(it)
+                }
+                .orEmpty()
+
+            // Аудитория
+            val room = cells
+                .firstOrNull {
+                    Regex(
+                        "\\d+[А-Яа-яA-Za-z]?\\s*,\\s*.+"
+                    ).matches(it)
+                }
+                .orEmpty()
+
+            // Преподаватель
+            val teacher = cells
+                .drop(subjectIndex + 1)
+                .firstOrNull {
+                    it != type &&
+                    it != room &&
+                    it != group &&
+                    !dateRegex.containsMatchIn(it) &&
+                    !timeRegex.containsMatchIn(it) &&
+                    it.contains(" ")
+                }
+                .orEmpty()
+
+            result += Lesson(
+                date = date,
+                time = time,
+                subject = subject,
+                teacher = teacher,
+                type = type,
+                room = room,
+                group = group
+            )
+        }
     }
+
+    android.util.Log.d(
+        "VVSU_TEST",
+        "Найдено занятий группы $group: ${result.size}"
+    )
+
+    return result
+}
 
     private fun findTeacherUrl(
         teacher: String
