@@ -74,22 +74,26 @@ class VvsuRepository {
     }
 
     suspend fun loadGroup(
-        group: String
-    ): List<Lesson> = withContext(Dispatchers.IO) {
+    group: String
+): List<Lesson> = withContext(Dispatchers.IO) {
 
-        val cleanGroup = group.trim()
+    val cleanGroup = group.trim()
 
-        if (cleanGroup.isBlank()) {
-            return@withContext emptyList()
-        }
+    if (cleanGroup.isBlank()) {
+        return@withContext emptyList()
+    }
 
-        /*
-         * ВРЕМЕННО:
-         * отключаем SSL-проверку перед запросом ВВГУ.
-         */
+    try {
+
         installTemporaryTrustAllCertificates()
 
-        val doc = Jsoup.connect(timetableUrl)
+        /*
+         * ШАГ 1.
+         * Получаем ID группы через официальный фильтр ВВГУ.
+         */
+        val filterUrl = "https://www.vvsu.ru/local/controllers/getFilterValues.php"
+
+        val filterResponse = Jsoup.connect(filterUrl)
             .userAgent(
                 "Mozilla/5.0 (Linux; Android 13) " +
                     "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
@@ -99,35 +103,137 @@ class VvsuRepository {
                 "ru-RU,ru;q=0.9"
             )
             .timeout(30_000)
-            .followRedirects(true)
+            .ignoreContentType(true)
+            .data("substr", cleanGroup)
+            .data("hlBlockId", "46")
+            .data("hlBlockFieldName", "UF_GROUP_NAME")
+            .data("hlBlockFieldId", "UF_GROUP_ID")
             .get()
 
+        val json = org.json.JSONObject(
+            filterResponse.text()
+        )
+
+        val data = json.optJSONArray("data")
+            ?: return@withContext emptyList()
+
+        var groupId: String? = null
+        var groupName: String? = null
+
+        for (i in 0 until data.length()) {
+
+            val item = data.optJSONObject(i)
+                ?: continue
+
+            val value = item.optString("value")
+
+            if (
+                value.equals(
+                    cleanGroup,
+                    ignoreCase = true
+                )
+            ) {
+                groupId = item.optString("id")
+                groupName = value
+                break
+            }
+        }
+
+        if (groupId == null) {
+            android.util.Log.e(
+                "VVSU_TEST",
+                "Группа не найдена: $cleanGroup"
+            )
+
+            return@withContext emptyList()
+        }
+
+        android.util.Log.d(
+            "VVSU_TEST",
+            "Найдена группа: $groupName, ID: $groupId"
+        )
+
         /*
-         * Диагностика:
-         * если HTML действительно пришёл, приложение получит
-         * страницу ВВГУ.
+         * ШАГ 2.
+         * Повторяем POST-запрос официального сайта.
          */
-        android.util.Log.d(
-            "VVSU_TEST",
-            "ВВГУ загружен. HTML: ${doc.html().length} символов"
+        val filterQueryParams = """
+            [
+                {
+                    "valueId":"$groupId",
+                    "valueData":"$groupName",
+                    "hlBlockId":46,
+                    "hlBlockFieldName":"UF_GROUP_NAME",
+                    "hlBlockFieldId":"UF_GROUP_ID"
+                }
+            ]
+        """.trimIndent()
+
+        val requestBody = """
+            {
+                "filterQueryParams": $filterQueryParams
+            }
+        """.trimIndent()
+
+        val scheduleResponse = Jsoup.connect(
+            "https://www.vvsu.ru/timetable/index.php"
         )
+            .userAgent(
+                "Mozilla/5.0 (Linux; Android 13) " +
+                    "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
+            )
+            .header(
+                "Accept",
+                "text/html, */*; q=0.01"
+            )
+            .header(
+                "Accept-Language",
+                "ru-RU,ru;q=0.9"
+            )
+            .header(
+                "Content-Type",
+                "application/json"
+            )
+            .header(
+                "X-Requested-With",
+                "XMLHttpRequest"
+            )
+            .requestBody(requestBody)
+            .timeout(30_000)
+            .ignoreContentType(true)
+            .followRedirects(true)
+            .method(org.jsoup.Connection.Method.POST)
+            .execute()
+
+        val html = scheduleResponse.body()
 
         android.util.Log.d(
             "VVSU_TEST",
-            "Заголовок страницы: ${doc.title()}"
+            "Расписание получено. HTML: ${html.length} символов"
         )
 
-        android.util.Log.d(
-            "VVSU_TEST",
-            "URL: ${doc.location()}"
+        val doc = Jsoup.parse(
+            html,
+            "https://www.vvsu.ru/timetable/"
         )
 
         parseGroupPage(
             doc = doc,
             group = cleanGroup
         )
-    }
 
+    } catch (e: Exception) {
+
+        android.util.Log.e(
+            "VVSU_TEST",
+            "Ошибка загрузки расписания группы",
+            e
+        )
+
+        emptyList()
+    }
+}
+   
     suspend fun loadTeacher(
         teacher: String
     ): List<Lesson> = withContext(Dispatchers.IO) {
@@ -197,106 +303,168 @@ class VvsuRepository {
         for (row in table.select("tr")) {
 
             val cells = row
-                .select("th,td")
+                .select("td[data-th]")
                 .map {
-                    it.text()
+                    val label = it.attr("data-th")
                         .replace(Regex("\\s+"), " ")
                         .trim()
+
+                    val value = it.text()
+                        .replace(Regex("\\s+"), " ")
+                        .trim()
+
+                    label to value
                 }
-                .filter { it.isNotBlank() }
 
-            if (cells.isEmpty()) continue
+            if (cells.isEmpty()) {
+                continue
+            }
 
-            val fullText = cells.joinToString(" ")
+            /*
+             * Получаем значения по названиям колонок.
+             */
+            val dateText = cells
+                .firstOrNull {
+                    it.first.equals(
+                        "Дата",
+                        ignoreCase = true
+                    )
+                }
+                ?.second
+                .orEmpty()
 
-            // Ищем дату в строке
-            val dateMatch = dateRegex.find(fullText)
+            val timeText = cells
+                .firstOrNull {
+                    it.first.equals(
+                        "Время",
+                        ignoreCase = true
+                    )
+                }
+                ?.second
+                .orEmpty()
+
+            val subject = cells
+                .firstOrNull {
+                    it.first.equals(
+                        "Дисциплина",
+                        ignoreCase = true
+                    )
+                }
+                ?.second
+                .orEmpty()
+
+            val type = cells
+                .firstOrNull {
+                    it.first.equals(
+                        "Занятие",
+                        ignoreCase = true
+                    )
+                }
+                ?.second
+                .orEmpty()
+
+            val room = cells
+                .firstOrNull {
+                    it.first.equals(
+                        "Аудитория",
+                        ignoreCase = true
+                    )
+                }
+                ?.second
+                .orEmpty()
+
+            val teacher = cells
+                .firstOrNull {
+                    it.first.equals(
+                        "Преподаватель",
+                        ignoreCase = true
+                    )
+                }
+                ?.second
+                .orEmpty()
+
+            /*
+             * Дата есть только у первой строки каждого дня.
+             * Для остальных строк используем предыдущую дату.
+             */
+            val dateMatch = dateRegex.find(dateText)
 
             if (dateMatch != null) {
+
                 currentDate = try {
+
                     LocalDate.parse(
                         dateMatch.value,
                         DateTimeFormatter.ofPattern(
                             "d.M.yyyy",
                             Locale("ru")
                         )
-                    )
-                } catch (_: Exception) {
-                    currentDate
+
+                    } catch (_: Exception) {
+                        currentDate
+                    }
                 }
-            }
 
-            val date = currentDate ?: continue
+                val date = currentDate
+                    ?: continue
 
-            // Строка должна относиться к выбранной группе
-            if (!fullText.contains(group, ignoreCase = true)) {
-                continue
-            }
-
-            // Ищем время
-            val timeIndex = cells.indexOfFirst {
-                timeRegex.containsMatchIn(it)
-            }
-
-            if (timeIndex < 0) continue
-
-            val time = timeRegex
-                .find(cells[timeIndex])
-                ?.value
-                ?: continue
-
-            // Следующая ячейка после времени — дисциплина
-            val subjectIndex = timeIndex + 1
-
-            if (subjectIndex >= cells.size) continue
-
-            val subject = cells[subjectIndex]
-
-            if (
-                subject.isBlank() ||
-                isLessonType(subject)
-            ) {
-                continue
-            }
-
-            // Тип занятия
-            val type = cells
-                .firstOrNull {
-                    isLessonType(it)
+                /*
+                 * Без времени это не занятие.
+                 */
+                if (!timeRegex.containsMatchIn(timeText)) {
+                    continue
                 }
-                .orEmpty()
 
-            // Аудитория
-            val room = cells
-                .firstOrNull {
-                    Regex(
-                        "\\d+[А-Яа-яA-Za-z]?\\s*,\\s*.+"
-                    ).matches(it)
+                if (subject.isBlank()) {
+                    continue
                 }
-                .orEmpty()
 
-            // Преподаватель
-            val teacher = cells
-                .drop(subjectIndex + 1)
-                .firstOrNull {
-                    it != type &&
-                    it != room &&
-                    it != group &&
-                    !dateRegex.containsMatchIn(it) &&
-                    !timeRegex.containsMatchIn(it) &&
-                    it.contains(" ")
+                val time = timeRegex
+                    .find(timeText)
+                    ?.value
+                    ?: continue
+
+                result += Lesson(
+                    date = date,
+                    time = time,
+                    subject = subject,
+                    teacher = teacher,
+                    type = type,
+                    room = room,
+                    group = group
+                )
+
+            } else {
+
+                /*
+                 * Продолжение того же дня.
+                 */
+                val date = currentDate
+                    ?: continue
+
+                if (!timeRegex.containsMatchIn(timeText)) {
+                    continue
                 }
-                .orEmpty()
 
-            result += Lesson(
-                date = date,
-                time = time,
-                subject = subject,
-                teacher = teacher,
-                type = type,
-                room = room,
-                group = group
-            )
+                if (subject.isBlank()) {
+                    continue
+                }
+
+                val time = timeRegex
+                    .find(timeText)
+                    ?.value
+                    ?: continue
+
+                result += Lesson(
+                    date = date,
+                    time = time,
+                    subject = subject,
+                    teacher = teacher,
+                    type = type,
+                    room = room,
+                    group = group
+                )
+            }
         }
     }
 
