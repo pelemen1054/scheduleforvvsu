@@ -399,8 +399,8 @@ class VvsuRepository {
                             "d.M.yyyy",
                             Locale("ru")
                         )
-
-                    } catch (_: Exception) {
+                    )
+                } catch (_: Exception) {
                         currentDate
                     }
                 }
