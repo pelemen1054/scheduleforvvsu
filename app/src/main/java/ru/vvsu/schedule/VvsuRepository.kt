@@ -401,8 +401,7 @@ class VvsuRepository {
                         )
                     )
                 } catch (_: Exception) {
-                        currentDate
-                    }
+                    currentDate
                 }
 
                 val date = currentDate
