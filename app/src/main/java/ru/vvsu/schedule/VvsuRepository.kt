@@ -479,11 +479,26 @@ class VvsuRepository {
         teacher: String
     ): String? {
 
+        /*
+         * На portfolio.vvsu.ru главная страница содержит
+         * список сотрудников с пагинацией.
+         *
+         * Ссылка сотрудника имеет вид:
+         * /resume/tid/12345
+         *
+         * Расписание этого же сотрудника находится по адресу:
+         * /timetable/tid/12345/
+         */
+
         val pages = listOf(
-            "https://portfolio.vvsu.ru/",
-            "https://portfolio.vvsu.ru/page/2/",
-            "https://portfolio.vvsu.ru/page/3/"
-        )
+            "https://portfolio.vvsu.ru/"
+        ) + (2..7).map {
+            "https://portfolio.vvsu.ru/page/$it/"
+        }
+
+        val normalizedTeacher = teacher
+            .replace(Regex("\\s+"), " ")
+            .trim()
 
         for (page in pages) {
 
@@ -495,49 +510,75 @@ class VvsuRepository {
                             "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
                     )
                     .timeout(20_000)
+                    .followRedirects(true)
                     .get()
 
                 val links = doc.select("a[href]")
+                    .filter {
+                        it.attr("href").contains("/resume/tid/")
+                    }
 
                 val exact = links.firstOrNull {
                     it.text()
                         .replace(Regex("\\s+"), " ")
                         .trim()
-                        .equals(
-                            teacher,
-                            ignoreCase = true
-                        )
+                        .equals(normalizedTeacher, ignoreCase = true)
                 }
 
-                if (exact != null) {
-                    return exact.absUrl("href")
-                }
-
-                val partial = links.firstOrNull {
+                val matched = exact ?: links.firstOrNull {
                     it.text()
                         .replace(Regex("\\s+"), " ")
                         .trim()
-                        .contains(
-                            teacher,
-                            ignoreCase = true
-                        )
+                        .contains(normalizedTeacher, ignoreCase = true)
                 }
 
-                if (partial != null) {
-                    return partial.absUrl("href")
+                if (matched != null) {
+
+                    val profileUrl = matched.absUrl("href")
+
+                    val tid = Regex("/resume/tid/(\\d+)")
+                        .find(profileUrl)
+                        ?.groupValues
+                        ?.getOrNull(1)
+
+                    if (tid != null) {
+
+                        val timetableUrl =
+                            "https://portfolio.vvsu.ru/timetable/tid/$tid/"
+
+                        android.util.Log.d(
+                            "VVSU_TEST",
+                            "Преподаватель: " + matched.text().trim()
+                        )
+                        android.util.Log.d(
+                            "VVSU_TEST",
+                            "Найден tid: " + tid
+                        )
+                        android.util.Log.d(
+                            "VVSU_TEST",
+                            "Расписание преподавателя: " + timetableUrl
+                        )
+
+                        return timetableUrl
+                    }
                 }
 
             } catch (e: Exception) {
 
                 android.util.Log.e(
                     "VVSU_TEST",
-                    "Ошибка поиска преподавателя: ${e.message}",
+                    "Ошибка поиска преподавателя на $page: " + e.message,
                     e
                 )
 
                 continue
             }
         }
+
+        android.util.Log.e(
+            "VVSU_TEST",
+            "Преподаватель не найден: " + normalizedTeacher
+        )
 
         return null
     }
