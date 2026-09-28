@@ -480,59 +480,114 @@ class VvsuRepository {
 
     private suspend fun findTeacherUrl(
         teacher: String
-    ): String? = coroutineScope {
+    ): String? = withContext(Dispatchers.IO) {
 
         val normalizedTeacher = teacher
             .replace(Regex("\\s+"), " ")
             .trim()
 
         if (normalizedTeacher.isBlank()) {
-            return@coroutineScope null
+            return@withContext null
         }
+
+        /*
+         * Портфолио ВВГУ использует собственный AJAX-поиск сотрудников.
+         *
+         * Запрос:
+         * POST https://portfolio.vvsu.ru/controller/elementLoad.php
+         *
+         * Параметры, которые отправляет сам сайт:
+         * url=/page/1/
+         * GetInfoBlock={"filters":[],"filterDates":[]}
+         * element=2146741160
+         * clearPager=true
+         * search=<ФИО>
+         *
+         * Благодаря этому не нужно перебирать сотни страниц портфолио.
+         */
+        val searchUrl =
+            "https://portfolio.vvsu.ru/controller/elementLoad.php"
 
         val userAgent =
             "Mozilla/5.0 (Linux; Android 13) " +
                 "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
 
-        fun normalize(value: String): String =
-            value
-                .replace(Regex("\\s+"), " ")
-                .trim()
-                .lowercase(Locale("ru"))
+        try {
 
-        fun words(value: String): List<String> =
-            normalize(value)
-                .split(" ")
-                .filter { it.isNotBlank() }
+            val response = Jsoup.connect(searchUrl)
+                .userAgent(userAgent)
+                .header(
+                    "Accept",
+                    "text/html, */*; q=0.01"
+                )
+                .header(
+                    "Accept-Language",
+                    "ru-RU,ru;q=0.9"
+                )
+                .header(
+                    "X-Requested-With",
+                    "XMLHttpRequest"
+                )
+                .referrer(portfolioUrl)
+                .data("url", "/page/1/")
+                .data(
+                    "GetInfoBlock",
+                    """{"filters":[],"filterDates":[]}"""
+                )
+                .data("element", "2146741160")
+                .data("clearPager", "true")
+                .data("search", normalizedTeacher)
+                .timeout(15_000)
+                .followRedirects(true)
+                .ignoreContentType(true)
+                .method(org.jsoup.Connection.Method.POST)
+                .execute()
 
-        fun extractTimetableUrl(doc: Document): String? {
+            val html = response.body()
 
-            val wanted = words(normalizedTeacher)
+            android.util.Log.d(
+                "VVSU_TEST",
+                "Ответ поиска преподавателя: ${html.length} символов"
+            )
 
-            val links = doc.select("a[href]")
-                .filter { it.attr("href").contains("/resume/tid/") }
+            val doc = Jsoup.parse(
+                html,
+                portfolioUrl
+            )
+
+            /*
+             * В ответе сервера сотрудник представлен обычной
+             * ссылкой вида /resume/tid/13628.
+             */
+            val links = doc.select(
+                "a[href*=/resume/tid/]"
+            )
+
+            if (links.isEmpty()) {
+
+                android.util.Log.e(
+                    "VVSU_TEST",
+                    "Поиск не вернул преподавателя: $normalizedTeacher"
+                )
+
+                return@withContext null
+            }
+
+            fun normalize(value: String): String =
+                value
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                    .lowercase(Locale("ru"))
 
             val exact = links.firstOrNull {
                 normalize(it.text()) == normalize(normalizedTeacher)
             }
 
-            val matched = exact ?: links.firstOrNull { link ->
-                val text = normalize(link.text())
-                val candidateWords = words(text)
-
-                wanted.isNotEmpty() &&
-                    wanted.all { word ->
-                        candidateWords.any { candidate ->
-                            candidate == word ||
-                                candidate.contains(word) ||
-                                word.contains(candidate)
-                        }
-                    }
-            }
-
-            if (matched == null) {
-                return null
-            }
+            val matched = exact ?: links.firstOrNull {
+                normalize(it.text()).contains(
+                    normalize(normalizedTeacher)
+                )
+            } ?: links.first()
 
             val profileUrl = matched.absUrl("href")
 
@@ -540,7 +595,16 @@ class VvsuRepository {
                 .find(profileUrl)
                 ?.groupValues
                 ?.getOrNull(1)
-                ?: return null
+
+            if (tid == null) {
+
+                android.util.Log.e(
+                    "VVSU_TEST",
+                    "Не удалось получить tid из: $profileUrl"
+                )
+
+                return@withContext null
+            }
 
             val timetableUrl =
                 "https://portfolio.vvsu.ru/timetable/tid/$tid/"
@@ -549,104 +613,29 @@ class VvsuRepository {
                 "VVSU_TEST",
                 "Преподаватель найден: ${matched.text().trim()}"
             )
+
             android.util.Log.d(
                 "VVSU_TEST",
                 "Профиль: $profileUrl"
             )
+
             android.util.Log.d(
                 "VVSU_TEST",
                 "Найден tid: $tid"
             )
 
-            return timetableUrl
-        }
-
-        suspend fun loadPage(pageNumber: Int): String? =
-            withContext(Dispatchers.IO) {
-
-                val url =
-                    if (pageNumber == 1) {
-                        portfolioUrl
-                    } else {
-                        "$portfolioUrl/page/$pageNumber/"
-                    }
-
-                try {
-                    val doc = Jsoup.connect(url)
-                        .userAgent(userAgent)
-                        .header("Accept-Language", "ru-RU,ru;q=0.9")
-                        .timeout(7_000)
-                        .followRedirects(true)
-                        .get()
-
-                    extractTimetableUrl(doc)
-
-                } catch (e: Exception) {
-
-                    android.util.Log.w(
-                        "VVSU_TEST",
-                        "Пропущена страница $pageNumber: ${e.message}"
-                    )
-
-                    null
-                }
-            }
-
-        val lastPage = try {
-
-            val firstDoc = Jsoup.connect(portfolioUrl)
-                .userAgent(userAgent)
-                .header("Accept-Language", "ru-RU,ru;q=0.9")
-                .timeout(7_000)
-                .followRedirects(true)
-                .get()
-
-            firstDoc.select("a[href]")
-                .mapNotNull { link ->
-                    Regex("/page/(\\d+)/")
-                        .find(link.absUrl("href"))
-                        ?.groupValues
-                        ?.getOrNull(1)
-                        ?.toIntOrNull()
-                }
-                .maxOrNull()
-                ?.coerceAtLeast(1)
-                ?: 1
+            timetableUrl
 
         } catch (e: Exception) {
-            android.util.Log.w(
+
+            android.util.Log.e(
                 "VVSU_TEST",
-                "Не удалось определить число страниц портфолио: ${e.message}"
+                "Ошибка AJAX-поиска преподавателя: $normalizedTeacher",
+                e
             )
-            156
+
+            null
         }
-
-        android.util.Log.d(
-            "VVSU_TEST",
-            "Ищем '$normalizedTeacher' на $lastPage страницах портфолио"
-        )
-
-        for (batch in (1..lastPage).chunked(24)) {
-
-            val results = batch.map { pageNumber ->
-                async {
-                    loadPage(pageNumber)
-                }
-            }.awaitAll()
-
-            val found = results.firstOrNull { it != null }
-
-            if (found != null) {
-                return@coroutineScope found
-            }
-        }
-
-        android.util.Log.e(
-            "VVSU_TEST",
-            "Преподаватель не найден в портфолио: $normalizedTeacher"
-        )
-
-        null
     }
 
     private fun parseTeacherPage(
