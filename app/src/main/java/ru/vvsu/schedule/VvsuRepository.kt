@@ -495,24 +495,44 @@ class VvsuRepository {
                 "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
 
         fun normalize(value: String): String =
-            value.replace(Regex("\\s+"), " ").trim()
+            value
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .lowercase(Locale("ru"))
+
+        fun words(value: String): List<String> =
+            normalize(value)
+                .split(" ")
+                .filter { it.isNotBlank() }
 
         fun extractTimetableUrl(doc: Document): String? {
+
+            val wanted = words(normalizedTeacher)
 
             val links = doc.select("a[href]")
                 .filter { it.attr("href").contains("/resume/tid/") }
 
             val exact = links.firstOrNull {
-                normalize(it.text())
-                    .equals(normalizedTeacher, ignoreCase = true)
+                normalize(it.text()) == normalize(normalizedTeacher)
             }
 
-            val matched = exact ?: links.firstOrNull {
-                normalize(it.text())
-                    .contains(normalizedTeacher, ignoreCase = true)
+            val matched = exact ?: links.firstOrNull { link ->
+                val text = normalize(link.text())
+                val candidateWords = words(text)
+
+                wanted.isNotEmpty() &&
+                    wanted.all { word ->
+                        candidateWords.any { candidate ->
+                            candidate == word ||
+                                candidate.contains(word) ||
+                                word.contains(candidate)
+                        }
+                    }
             }
 
-            if (matched == null) return null
+            if (matched == null) {
+                return null
+            }
 
             val profileUrl = matched.absUrl("href")
 
@@ -531,11 +551,11 @@ class VvsuRepository {
             )
             android.util.Log.d(
                 "VVSU_TEST",
-                "Профиль: ${profileUrl}"
+                "Профиль: $profileUrl"
             )
             android.util.Log.d(
                 "VVSU_TEST",
-                "Найден tid: ${tid}"
+                "Найден tid: $tid"
             )
 
             return timetableUrl
@@ -546,16 +566,16 @@ class VvsuRepository {
 
                 val url =
                     if (pageNumber == 1) {
-                        "https://portfolio.vvsu.ru/"
+                        portfolioUrl
                     } else {
-                        "https://portfolio.vvsu.ru/page/$pageNumber/"
+                        "$portfolioUrl/page/$pageNumber/"
                     }
 
                 try {
                     val doc = Jsoup.connect(url)
                         .userAgent(userAgent)
                         .header("Accept-Language", "ru-RU,ru;q=0.9")
-                        .timeout(10_000)
+                        .timeout(7_000)
                         .followRedirects(true)
                         .get()
 
@@ -563,9 +583,9 @@ class VvsuRepository {
 
                 } catch (e: Exception) {
 
-                    android.util.Log.e(
+                    android.util.Log.w(
                         "VVSU_TEST",
-                        "Ошибка страницы $pageNumber: ${e.message}"
+                        "Пропущена страница $pageNumber: ${e.message}"
                     )
 
                     null
@@ -574,27 +594,31 @@ class VvsuRepository {
 
         val lastPage = try {
 
-            val firstDoc = Jsoup.connect("https://portfolio.vvsu.ru/")
+            val firstDoc = Jsoup.connect(portfolioUrl)
                 .userAgent(userAgent)
                 .header("Accept-Language", "ru-RU,ru;q=0.9")
-                .timeout(10_000)
+                .timeout(7_000)
                 .followRedirects(true)
                 .get()
 
             firstDoc.select("a[href]")
                 .mapNotNull { link ->
                     Regex("/page/(\\d+)/")
-                        .find(link.attr("href"))
+                        .find(link.absUrl("href"))
                         ?.groupValues
                         ?.getOrNull(1)
                         ?.toIntOrNull()
                 }
                 .maxOrNull()
                 ?.coerceAtLeast(1)
-                ?: 148
+                ?: 1
 
         } catch (e: Exception) {
-            148
+            android.util.Log.w(
+                "VVSU_TEST",
+                "Не удалось определить число страниц портфолио: ${e.message}"
+            )
+            156
         }
 
         android.util.Log.d(
@@ -602,7 +626,7 @@ class VvsuRepository {
             "Ищем '$normalizedTeacher' на $lastPage страницах портфолио"
         )
 
-        for (batch in (1..lastPage).chunked(8)) {
+        for (batch in (1..lastPage).chunked(24)) {
 
             val results = batch.map { pageNumber ->
                 async {
