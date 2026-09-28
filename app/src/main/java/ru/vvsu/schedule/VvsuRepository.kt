@@ -587,7 +587,8 @@ class VvsuRepository {
                 normalize(it.text()).contains(
                     normalize(normalizedTeacher)
                 )
-            } ?: links.first()
+            } ?: links.firstOrNull()
+                ?: return@withContext null
 
             val profileUrl = matched.absUrl("href")
 
