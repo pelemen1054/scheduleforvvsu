@@ -1,6 +1,9 @@
 package ru.vvsu.schedule
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Document
@@ -477,7 +480,7 @@ class VvsuRepository {
 
     private suspend fun findTeacherUrl(
         teacher: String
-    ): String? = kotlinx.coroutines.coroutineScope {
+    ): String? = coroutineScope {
 
         val normalizedTeacher = teacher
             .replace(Regex("\\s+"), " ")
@@ -524,22 +527,22 @@ class VvsuRepository {
 
             android.util.Log.d(
                 "VVSU_TEST",
-                "Преподаватель найден: ${{matched.text().trim()}"
+                "Преподаватель найден: ${matched.text().trim()}"
             )
             android.util.Log.d(
                 "VVSU_TEST",
-                "Профиль: ${{profileUrl}"
+                "Профиль: ${profileUrl}"
             )
             android.util.Log.d(
                 "VVSU_TEST",
-                "Найден tid: ${{tid}"
+                "Найден tid: ${tid}"
             )
 
             return timetableUrl
         }
 
         suspend fun loadPage(pageNumber: Int): String? =
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            withContext(Dispatchers.IO) {
 
                 val url =
                     if (pageNumber == 1) {
@@ -562,7 +565,7 @@ class VvsuRepository {
 
                     android.util.Log.e(
                         "VVSU_TEST",
-                        "Ошибка страницы $pageNumber: ${{e.message}"
+                        "Ошибка страницы $pageNumber: ${e.message}"
                     )
 
                     null
@@ -602,7 +605,7 @@ class VvsuRepository {
         for (batch in (1..lastPage).chunked(8)) {
 
             val results = batch.map { pageNumber ->
-                kotlinx.coroutines.async {
+                async {
                     loadPage(pageNumber)
                 }
             }.awaitAll()
