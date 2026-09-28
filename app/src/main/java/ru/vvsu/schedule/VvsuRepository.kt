@@ -475,112 +475,151 @@ class VvsuRepository {
     return result
 }
 
-    private fun findTeacherUrl(
+    private suspend fun findTeacherUrl(
         teacher: String
-    ): String? {
-
-        /*
-         * На portfolio.vvsu.ru главная страница содержит
-         * список сотрудников с пагинацией.
-         *
-         * Ссылка сотрудника имеет вид:
-         * /resume/tid/12345
-         *
-         * Расписание этого же сотрудника находится по адресу:
-         * /timetable/tid/12345/
-         */
-
-        val pages = listOf(
-            "https://portfolio.vvsu.ru/"
-        ) + (2..7).map {
-            "https://portfolio.vvsu.ru/page/$it/"
-        }
+    ): String? = kotlinx.coroutines.coroutineScope {
 
         val normalizedTeacher = teacher
             .replace(Regex("\\s+"), " ")
             .trim()
 
-        for (page in pages) {
+        if (normalizedTeacher.isBlank()) {
+            return@coroutineScope null
+        }
 
-            try {
+        val userAgent =
+            "Mozilla/5.0 (Linux; Android 13) " +
+                "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
 
-                val doc = Jsoup.connect(page)
-                    .userAgent(
-                        "Mozilla/5.0 (Linux; Android 13) " +
-                            "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
-                    )
-                    .timeout(20_000)
-                    .followRedirects(true)
-                    .get()
+        fun normalize(value: String): String =
+            value.replace(Regex("\\s+"), " ").trim()
 
-                val links = doc.select("a[href]")
-                    .filter {
-                        it.attr("href").contains("/resume/tid/")
+        fun extractTimetableUrl(doc: Document): String? {
+
+            val links = doc.select("a[href]")
+                .filter { it.attr("href").contains("/resume/tid/") }
+
+            val exact = links.firstOrNull {
+                normalize(it.text())
+                    .equals(normalizedTeacher, ignoreCase = true)
+            }
+
+            val matched = exact ?: links.firstOrNull {
+                normalize(it.text())
+                    .contains(normalizedTeacher, ignoreCase = true)
+            }
+
+            if (matched == null) return null
+
+            val profileUrl = matched.absUrl("href")
+
+            val tid = Regex("/resume/tid/(\\d+)")
+                .find(profileUrl)
+                ?.groupValues
+                ?.getOrNull(1)
+                ?: return null
+
+            val timetableUrl =
+                "https://portfolio.vvsu.ru/timetable/tid/$tid/"
+
+            android.util.Log.d(
+                "VVSU_TEST",
+                "Преподаватель найден: ${{matched.text().trim()}"
+            )
+            android.util.Log.d(
+                "VVSU_TEST",
+                "Профиль: ${{profileUrl}"
+            )
+            android.util.Log.d(
+                "VVSU_TEST",
+                "Найден tid: ${{tid}"
+            )
+
+            return timetableUrl
+        }
+
+        suspend fun loadPage(pageNumber: Int): String? =
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+
+                val url =
+                    if (pageNumber == 1) {
+                        "https://portfolio.vvsu.ru/"
+                    } else {
+                        "https://portfolio.vvsu.ru/page/$pageNumber/"
                     }
 
-                val exact = links.firstOrNull {
-                    it.text()
-                        .replace(Regex("\\s+"), " ")
-                        .trim()
-                        .equals(normalizedTeacher, ignoreCase = true)
+                try {
+                    val doc = Jsoup.connect(url)
+                        .userAgent(userAgent)
+                        .header("Accept-Language", "ru-RU,ru;q=0.9")
+                        .timeout(10_000)
+                        .followRedirects(true)
+                        .get()
+
+                    extractTimetableUrl(doc)
+
+                } catch (e: Exception) {
+
+                    android.util.Log.e(
+                        "VVSU_TEST",
+                        "Ошибка страницы $pageNumber: ${{e.message}"
+                    )
+
+                    null
                 }
+            }
 
-                val matched = exact ?: links.firstOrNull {
-                    it.text()
-                        .replace(Regex("\\s+"), " ")
-                        .trim()
-                        .contains(normalizedTeacher, ignoreCase = true)
-                }
+        val lastPage = try {
 
-                if (matched != null) {
+            val firstDoc = Jsoup.connect("https://portfolio.vvsu.ru/")
+                .userAgent(userAgent)
+                .header("Accept-Language", "ru-RU,ru;q=0.9")
+                .timeout(10_000)
+                .followRedirects(true)
+                .get()
 
-                    val profileUrl = matched.absUrl("href")
-
-                    val tid = Regex("/resume/tid/(\\d+)")
-                        .find(profileUrl)
+            firstDoc.select("a[href]")
+                .mapNotNull { link ->
+                    Regex("/page/(\\d+)/")
+                        .find(link.attr("href"))
                         ?.groupValues
                         ?.getOrNull(1)
-
-                    if (tid != null) {
-
-                        val timetableUrl =
-                            "https://portfolio.vvsu.ru/timetable/tid/$tid/"
-
-                        android.util.Log.d(
-                            "VVSU_TEST",
-                            "Преподаватель: " + matched.text().trim()
-                        )
-                        android.util.Log.d(
-                            "VVSU_TEST",
-                            "Найден tid: " + tid
-                        )
-                        android.util.Log.d(
-                            "VVSU_TEST",
-                            "Расписание преподавателя: " + timetableUrl
-                        )
-
-                        return timetableUrl
-                    }
+                        ?.toIntOrNull()
                 }
+                .maxOrNull()
+                ?.coerceAtLeast(1)
+                ?: 148
 
-            } catch (e: Exception) {
+        } catch (e: Exception) {
+            148
+        }
 
-                android.util.Log.e(
-                    "VVSU_TEST",
-                    "Ошибка поиска преподавателя на $page: " + e.message,
-                    e
-                )
+        android.util.Log.d(
+            "VVSU_TEST",
+            "Ищем '$normalizedTeacher' на $lastPage страницах портфолио"
+        )
 
-                continue
+        for (batch in (1..lastPage).chunked(8)) {
+
+            val results = batch.map { pageNumber ->
+                kotlinx.coroutines.async {
+                    loadPage(pageNumber)
+                }
+            }.awaitAll()
+
+            val found = results.firstOrNull { it != null }
+
+            if (found != null) {
+                return@coroutineScope found
             }
         }
 
         android.util.Log.e(
             "VVSU_TEST",
-            "Преподаватель не найден: " + normalizedTeacher
+            "Преподаватель не найден в портфолио: $normalizedTeacher"
         )
 
-        return null
+        null
     }
 
     private fun parseTeacherPage(
