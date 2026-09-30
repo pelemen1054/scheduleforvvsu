@@ -76,6 +76,120 @@ class VvsuRepository {
         )
     }
 
+    suspend fun searchGroups(
+        query: String
+    ): List<String> = withContext(Dispatchers.IO) {
+
+        val cleanQuery = query.trim()
+
+        if (cleanQuery.length < 2) {
+            return@withContext emptyList()
+        }
+
+        try {
+            installTemporaryTrustAllCertificates()
+
+            val response = Jsoup.connect(
+                "https://www.vvsu.ru/local/controllers/getFilterValues.php"
+            )
+                .userAgent(
+                    "Mozilla/5.0 (Linux; Android 13) " +
+                        "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
+                )
+                .header("Accept-Language", "ru-RU,ru;q=0.9")
+                .timeout(15_000)
+                .ignoreContentType(true)
+                .data("substr", cleanQuery)
+                .data("hlBlockId", "46")
+                .data("hlBlockFieldName", "UF_GROUP_NAME")
+                .data("hlBlockFieldId", "UF_GROUP_ID")
+                .get()
+
+            val json = org.json.JSONObject(response.text())
+            val data = json.optJSONArray("data")
+                ?: return@withContext emptyList()
+
+            buildList {
+                for (i in 0 until data.length()) {
+                    val item = data.optJSONObject(i) ?: continue
+                    val value = item.optString("value").trim()
+
+                    if (value.isNotBlank() && !contains(value)) {
+                        add(value)
+                    }
+
+                    if (size >= 8) break
+                }
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    suspend fun searchTeachers(
+        query: String
+    ): List<String> = withContext(Dispatchers.IO) {
+
+        val cleanQuery = query
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+        if (cleanQuery.length < 2) {
+            return@withContext emptyList()
+        }
+
+        try {
+            installTemporaryTrustAllCertificates()
+
+            val response = Jsoup.connect(
+                "https://portfolio.vvsu.ru/controller/elementLoad.php"
+            )
+                .userAgent(
+                    "Mozilla/5.0 (Linux; Android 13) " +
+                        "AppleWebKit/537.36 Chrome/120 Mobile Safari/537.36"
+                )
+                .header(
+                    "Accept",
+                    "text/html, */*; q=0.01"
+                )
+                .header(
+                    "Accept-Language",
+                    "ru-RU,ru;q=0.9"
+                )
+                .header(
+                    "X-Requested-With",
+                    "XMLHttpRequest"
+                )
+                .referrer(portfolioUrl)
+                .data("url", "/page/1/")
+                .data(
+                    "GetInfoBlock",
+                    """{"filters":[],"filterDates":[]}"""
+                )
+                .data("element", "2146741160")
+                .data("clearPager", "true")
+                .data("search", cleanQuery)
+                .timeout(15_000)
+                .followRedirects(true)
+                .ignoreContentType(true)
+                .method(org.jsoup.Connection.Method.POST)
+                .execute()
+
+            val doc = Jsoup.parse(
+                response.body(),
+                portfolioUrl
+            )
+
+            doc.select("a[href*=/resume/tid/]")
+                .map { it.text().replace(Regex("\\s+"), " ").trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .take(8)
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
     suspend fun loadGroup(
     group: String
 ): List<Lesson> = withContext(Dispatchers.IO) {
