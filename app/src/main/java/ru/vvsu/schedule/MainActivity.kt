@@ -3,16 +3,10 @@
 package ru.vvsu.schedule
 
 import android.Manifest
-import android.content.Intent
-import android.net.Uri
-import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
-import android.webkit.CookieManager
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -32,7 +26,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -356,10 +349,6 @@ fun App(
         mutableStateOf(false)
     }
 
-    var showLogin by remember {
-        mutableStateOf(false)
-    }
-
     var backPressedOnce by remember {
         mutableStateOf(false)
     }
@@ -386,10 +375,6 @@ fun App(
     BackHandler {
 
         when {
-
-            showLogin -> {
-                showLogin = false
-            }
 
             showSelector -> {
                 showSelector = false
@@ -431,9 +416,6 @@ fun App(
                         Text(
                             when {
 
-                                showLogin ->
-                                    "Вход в ЛК ВВГУ"
-
                                 showSelector ->
                                     if (vm.mode == "group")
                                         "Выбор группы"
@@ -452,18 +434,13 @@ fun App(
                     navigationIcon = {
 
                         if (
-                            showLogin ||
                             showSelector
                         ) {
 
                             IconButton(
                                 onClick = {
 
-                                    if (showLogin) {
-                                        showLogin = false
-                                    } else {
-                                        showSelector = false
-                                    }
+                                    showSelector = false
                                 }
                             ) {
 
@@ -480,7 +457,6 @@ fun App(
                         if (
                             tab == 0 &&
                             !showSelector &&
-                            !showLogin
                         ) {
 
                             IconButton(
@@ -503,7 +479,6 @@ fun App(
 
                 if (
                     !showSelector &&
-                    !showLogin
                 ) {
 
                     NavigationBar {
@@ -547,17 +522,6 @@ fun App(
 
             when {
 
-                showLogin -> {
-
-                    LoginScreen(
-                        Modifier.padding(padding),
-                        onLoginFinished = {
-                            showLogin = false
-                            vm.loadSchedule()
-                        }
-                    )
-                }
-
                 showSelector -> {
 
                     SelectorScreen(
@@ -565,11 +529,7 @@ fun App(
                         modifier = Modifier.padding(padding),
                         onBack = {
                             showSelector = false
-                        },
-                        onLogin = {
-                            showLogin = true
-                        }
-                    )
+                        },                    )
                 }
 
                 tab == 0 -> {
@@ -595,11 +555,7 @@ fun App(
                         onSelectTeacher = {
                             vm.selectMode("teacher")
                             showSelector = true
-                        },
-                        onLogin = {
-                            showLogin = true
-                        }
-                    )
+                        },                    )
                 }
             }
         }
@@ -906,8 +862,7 @@ fun LessonCard(
 fun SelectorScreen(
     vm: MainViewModel,
     modifier: Modifier,
-    onBack: () -> Unit,
-    onLogin: () -> Unit
+    onBack: () -> Unit
 ) {
     var text by remember {
         mutableStateOf(
@@ -1059,23 +1014,7 @@ fun SelectorScreen(
             Modifier.height(16.dp)
         )
 
-        Button(
-            onClick = onLogin,
-            modifier =
-                Modifier.fillMaxWidth()
-        ) {
 
-            Icon(
-                Icons.Default.Login,
-                null
-            )
-
-            Spacer(
-                Modifier.width(8.dp)
-            )
-
-            Text("Войти через ЛК ВВГУ")
-        }
     }
 }
 
@@ -1084,8 +1023,7 @@ fun SettingsScreen(
     vm: MainViewModel,
     modifier: Modifier,
     onSelectGroup: () -> Unit,
-    onSelectTeacher: () -> Unit,
-    onLogin: () -> Unit
+    onSelectTeacher: () -> Unit
 ) {
     val context = LocalContext.current
     
@@ -1406,23 +1344,7 @@ fun SettingsScreen(
             Modifier.height(16.dp)
         )
 
-        Button(
-            onClick = onLogin,
-            modifier =
-                Modifier.fillMaxWidth()
-        ) {
 
-            Icon(
-                Icons.Default.Login,
-                null
-            )
-
-            Spacer(
-                Modifier.width(8.dp)
-            )
-
-            Text("Войти в ЛК ВВГУ")
-        }
 
         Spacer(
             Modifier.height(8.dp)
@@ -1454,74 +1376,6 @@ fun SettingsScreen(
             Modifier.height(16.dp)
         )
     }
-}
-
-@SuppressLint("SetJavaScriptEnabled")
-@Composable
-fun LoginScreen(
-    modifier: Modifier,
-    onLoginFinished: () -> Unit
-) {
-
-    val context = LocalContext.current
-
-    AndroidView(
-
-        modifier = modifier.fillMaxSize(),
-
-        factory = {
-
-            WebView(context).apply {
-
-                settings.javaScriptEnabled = true
-                settings.domStorageEnabled = true
-                settings.databaseEnabled = true
-                settings.loadsImagesAutomatically = true
-
-                CookieManager
-                    .getInstance()
-                    .setAcceptCookie(true)
-
-                CookieManager
-                    .getInstance()
-                    .setAcceptThirdPartyCookies(
-                        this,
-                        true
-                    )
-
-                webViewClient =
-                    object : WebViewClient() {
-
-                        override fun onPageFinished(
-                            view: WebView?,
-                            url: String?
-                        ) {
-
-                            super.onPageFinished(
-                                view,
-                                url
-                            )
-
-                            val currentUrl =
-                                url ?: ""
-
-                            if (
-                                currentUrl.contains(
-                                    "cabinet.vvsu.ru"
-                                )
-                            ) {
-
-                                onLoginFinished()
-                            }
-                        }
-                    }
-
-                loadUrl(
-                    "https://fort.vvsu.ru/openid/"
-                )
-            }
-        }
-    )
 }
 
 class MainActivity : ComponentActivity() {
