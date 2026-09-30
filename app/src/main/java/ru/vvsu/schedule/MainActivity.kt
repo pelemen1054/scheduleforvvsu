@@ -37,6 +37,8 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -73,7 +75,9 @@ class MainViewModel : ViewModel() {
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var lessons by mutableStateOf<List<Lesson>>(emptyList())
+    var suggestions by mutableStateOf<List<String>>(emptyList())
 
+    private var suggestionsJob: Job? = null
     private val repository = VvsuRepository()
 
     fun init(context: Context) {
@@ -154,6 +158,34 @@ class MainViewModel : ViewModel() {
     fun setTeacher(value: String) {
         selectedTeacher = value.trim()
         saveSettings()
+    }
+
+    fun loadSuggestions(query: String) {
+        suggestionsJob?.cancel()
+
+        if (query.trim().length < 2) {
+            suggestions = emptyList()
+            return
+        }
+
+        suggestionsJob = viewModelScope.launch {
+            delay(250)
+
+            suggestions = try {
+                if (mode == "group") {
+                    repository.searchGroups(query)
+                } else {
+                    repository.searchTeachers(query)
+                }
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    fun clearSuggestions() {
+        suggestionsJob?.cancel()
+        suggestions = emptyList()
     }
 
     fun loadSchedule() {
@@ -877,16 +909,28 @@ fun SelectorScreen(
     onBack: () -> Unit,
     onLogin: () -> Unit
 ) {
-    val context = LocalContext.current
-    
     var text by remember {
-
         mutableStateOf(
             if (vm.mode == "group")
                 vm.selectedGroup
             else
                 vm.selectedTeacher
         )
+    }
+
+    var expanded by remember {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(text, vm.mode) {
+        vm.loadSuggestions(text)
+        expanded = text.trim().length >= 2
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            vm.clearSuggestions()
+        }
     }
 
     Column(
@@ -898,38 +942,79 @@ fun SelectorScreen(
             .padding(16.dp)
     ) {
 
-        OutlinedTextField(
-            value = text,
+        ExposedDropdownMenuBox(
+            expanded = expanded && vm.suggestions.isNotEmpty(),
+            onExpandedChange = {
+                if (vm.suggestions.isNotEmpty()) {
+                    expanded = it
+                }
+            }
+        ) {
 
-            onValueChange = {
-                text = it
-            },
+            OutlinedTextField(
+                value = text,
 
-            modifier =
-                Modifier.fillMaxWidth(),
+                onValueChange = {
+                    text = it
+                    expanded = it.trim().length >= 2
+                },
 
-            label = {
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(),
 
-                Text(
-                    if (vm.mode == "group")
-                        "Название группы"
-                    else
-                        "ФИО преподавателя"
-                )
-            },
+                label = {
+                    Text(
+                        if (vm.mode == "group")
+                            "Название группы"
+                        else
+                            "ФИО преподавателя"
+                    )
+                },
 
-            placeholder = {
+                placeholder = {
+                    Text(
+                        if (vm.mode == "group")
+                            "Например: БИС-24-1"
+                        else
+                            "Например: Иванов Иван Иванович"
+                    )
+                },
 
-                Text(
-                    if (vm.mode == "group")
-                        "Например: БИС-24-1"
-                    else
-                        "Например: Иванов Иван Иванович"
-                )
-            },
+                singleLine = true,
 
-            singleLine = true
-        )
+                trailingIcon = {
+                    if (vm.suggestions.isNotEmpty()) {
+                        ExposedDropdownMenuDefaults.TrailingIcon(
+                            expanded = expanded
+                        )
+                    }
+                }
+            )
+
+            ExposedDropdownMenu(
+                expanded = expanded && vm.suggestions.isNotEmpty(),
+                onDismissRequest = {
+                    expanded = false
+                }
+            ) {
+
+                vm.suggestions.forEach { suggestion ->
+
+                    DropdownMenuItem(
+                        text = {
+                            Text(suggestion)
+                        },
+
+                        onClick = {
+                            text = suggestion
+                            expanded = false
+                            vm.clearSuggestions()
+                        }
+                    )
+                }
+            }
+        }
 
         Spacer(
             Modifier.height(12.dp)
@@ -944,6 +1029,7 @@ fun SelectorScreen(
                     vm.setTeacher(text)
                 }
 
+                vm.clearSuggestions()
                 vm.loadSchedule()
 
                 onBack()
