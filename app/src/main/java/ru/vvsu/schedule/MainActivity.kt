@@ -458,7 +458,7 @@ fun App(
 
                         if (
                             tab == 0 &&
-                            !showSelector &&
+                            !showSelector
                         ) {
 
                             IconButton(
@@ -480,7 +480,7 @@ fun App(
             bottomBar = {
 
                 if (
-                    !showSelector &&
+                    !showSelector
                 ) {
 
                     NavigationBar {
