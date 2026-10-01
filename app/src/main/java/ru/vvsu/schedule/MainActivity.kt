@@ -234,7 +234,7 @@ class MainViewModel : ViewModel() {
 
     private fun currentCachePrefix(): String {
         val source = if (mode == "group") selectedGroup else selectedTeacher
-        return "schedule_cache_\${mode}_\${source}"
+        return "schedule_cache_${mode}_${source}"
     }
 
     private fun saveScheduleToCache(result: List<Lesson>) {
@@ -260,21 +260,21 @@ class MainViewModel : ViewModel() {
         val prefix = currentCachePrefix()
 
         p.edit()
-            .putString("\${prefix}_data", array.toString())
-            .putLong("\${prefix}_time", System.currentTimeMillis())
+            .putString("${prefix}_data", array.toString())
+            .putLong("${prefix}_time", System.currentTimeMillis())
             .apply()
     }
 
     private fun loadScheduleFromCache(): List<Lesson>? {
         val p = preferences ?: return null
         val prefix = currentCachePrefix()
-        val savedAt = p.getLong("\${prefix}_time", 0L)
+        val savedAt = p.getLong("${prefix}_time", 0L)
 
         if (savedAt <= 0L || System.currentTimeMillis() - savedAt > cacheMaxAgeMs) {
             return null
         }
 
-        val raw = p.getString("\${prefix}_data", null) ?: return null
+        val raw = p.getString("${prefix}_data", null) ?: return null
 
         return try {
             val array = JSONArray(raw)
