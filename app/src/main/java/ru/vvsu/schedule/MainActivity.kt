@@ -25,6 +25,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.rememberDatePickerState
+import java.time.ZoneId
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -743,6 +747,43 @@ fun ScheduleScreen(
     modifier: Modifier,
     onShowSelector: () -> Unit
 ) {
+    var showDatePicker by remember { mutableStateOf(false) }
+
+    if (showDatePicker) {
+        val pickerState = rememberDatePickerState(
+            initialSelectedDateMillis = vm.date
+                .atStartOfDay(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli()
+        )
+
+        DatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let { millis ->
+                            val selected = java.time.Instant.ofEpochMilli(millis)
+                                .atZone(ZoneId.systemDefault())
+                                .toLocalDate()
+                            vm.changeDate(selected)
+                        }
+                        showDatePicker = false
+                    }
+                ) {
+                    Text("Выбрать")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Отмена")
+                }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+
     PullToRefreshBox(
         isRefreshing = vm.loading,
         onRefresh = {
@@ -847,11 +888,10 @@ fun ScheduleScreen(
 
                 TextButton(
                     onClick = {
-                        vm.changeDate(LocalDate.now())
+                        showDatePicker = true
                     }
                 ) {
                     Text(
-                        vm.date.format(
                             DateTimeFormatter.ofPattern(
                                 "d MMMM, EEEE",
                                 Locale("ru")
