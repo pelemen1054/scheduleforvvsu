@@ -9,6 +9,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.net.Uri
+import org.json.JSONArray
+import org.json.JSONObject
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
@@ -74,6 +76,7 @@ class MainViewModel : ViewModel() {
     var lessons by mutableStateOf<List<Lesson>>(emptyList())
     var suggestions by mutableStateOf<List<String>>(emptyList())
     var favoriteGroups by mutableStateOf<Set<String>>(emptySet())
+    var cacheNotice by mutableStateOf<String?>(null)
 
     private var suggestionsJob: Job? = null
     private val repository = VvsuRepository()
@@ -210,6 +213,75 @@ class MainViewModel : ViewModel() {
         suggestions = emptyList()
     }
 
+    private val cacheMaxAgeMs = 7L * 24L * 60L * 60L * 1000L
+
+    private fun currentCachePrefix(): String {
+        val source = if (mode == "group") selectedGroup else selectedTeacher
+        return "schedule_cache_\${mode}_\${source}"
+    }
+
+    private fun saveScheduleToCache(result: List<Lesson>) {
+        val p = preferences ?: return
+        if (result.isEmpty()) return
+
+        val array = JSONArray()
+
+        result.forEach { lesson ->
+            array.put(
+                JSONObject().apply {
+                    put("date", lesson.date.toString())
+                    put("time", lesson.time)
+                    put("subject", lesson.subject)
+                    put("teacher", lesson.teacher)
+                    put("type", lesson.type)
+                    put("room", lesson.room)
+                    put("group", lesson.group)
+                }
+            )
+        }
+
+        val prefix = currentCachePrefix()
+
+        p.edit()
+            .putString("\${prefix}_data", array.toString())
+            .putLong("\${prefix}_time", System.currentTimeMillis())
+            .apply()
+    }
+
+    private fun loadScheduleFromCache(): List<Lesson>? {
+        val p = preferences ?: return null
+        val prefix = currentCachePrefix()
+        val savedAt = p.getLong("\${prefix}_time", 0L)
+
+        if (savedAt <= 0L || System.currentTimeMillis() - savedAt > cacheMaxAgeMs) {
+            return null
+        }
+
+        val raw = p.getString("\${prefix}_data", null) ?: return null
+
+        return try {
+            val array = JSONArray(raw)
+            buildList {
+                for (i in 0 until array.length()) {
+                    val item = array.getJSONObject(i)
+                    add(
+                        Lesson(
+                            date = LocalDate.parse(item.getString("date")),
+                            time = item.optString("time"),
+                            subject = item.optString("subject"),
+                            teacher = item.optString("teacher"),
+                            type = item.optString("type"),
+                            room = item.optString("room"),
+                            group = item.optString("group")
+                        )
+                    )
+                }
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     fun loadSchedule() {
 
         if (
@@ -230,6 +302,7 @@ class MainViewModel : ViewModel() {
 
         loading = true
         error = null
+        cacheNotice = null
 
         viewModelScope.launch {
 
@@ -245,6 +318,10 @@ class MainViewModel : ViewModel() {
                             selectedTeacher
                         )
                     }
+
+                if (result.isNotEmpty()) {
+                    saveScheduleToCache(result)
+                }
 
                 lessons = result
                     .filter {
@@ -268,20 +345,36 @@ class MainViewModel : ViewModel() {
 
             } catch (e: Exception) {
 
+                val cached = loadScheduleFromCache()
+
                 loading = false
-                lessons = emptyList()
 
-                error = when {
+                if (cached != null) {
+                    lessons = cached
+                        .filter {
+                            it.date == date
+                        }
+                        .sortedBy {
+                            it.time
+                        }
 
-                    e.message?.contains(
-                        "Unable to resolve host",
-                        true
-                    ) == true ->
-                        "Нет соединения с интернетом."
+                    cacheNotice = "Показано сохранённое расписание. Оно хранится 7 дней."
+                    error = null
+                } else {
+                    lessons = emptyList()
 
-                    else ->
-                        e.message
-                            ?: "Не удалось загрузить расписание ВВГУ."
+                    error = when {
+
+                        e.message?.contains(
+                            "Unable to resolve host",
+                            true
+                        ) == true ->
+                            "Нет соединения с интернетом."
+
+                        else ->
+                            e.message
+                                ?: "Не удалось загрузить расписание ВВГУ."
+                    }
                 }
             }
         }
@@ -727,6 +820,17 @@ fun ScheduleScreen(
             }
 
             HorizontalDivider()
+
+            if (vm.cacheNotice != null) {
+                Text(
+                    vm.cacheNotice ?: "",
+                    modifier = Modifier.padding(
+                        top = 8.dp,
+                        bottom = 4.dp
+                    ),
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
 
             when {
                 vm.loading -> {
