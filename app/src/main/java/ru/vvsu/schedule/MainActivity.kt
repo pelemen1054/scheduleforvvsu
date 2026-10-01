@@ -967,34 +967,10 @@ fun SelectorScreen(
                 singleLine = true,
 
                 trailingIcon = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (vm.mode == "group" && text.trim().isNotBlank()) {
-                            IconButton(
-                                onClick = {
-                                    vm.toggleFavoriteGroup(text)
-                                }
-                            ) {
-                                Icon(
-                                    if (vm.isFavoriteGroup(text))
-                                        Icons.Default.Star
-                                    else
-                                        Icons.Default.StarBorder,
-                                    contentDescription =
-                                        if (vm.isFavoriteGroup(text))
-                                            "Убрать из избранного"
-                                        else
-                                            "Добавить в избранное"
-                                )
-                            }
-                        }
-
-                        if (vm.suggestions.isNotEmpty()) {
-                            ExposedDropdownMenuDefaults.TrailingIcon(
-                                expanded = expanded
-                            )
-                        }
+                    if (vm.suggestions.isNotEmpty()) {
+                        ExposedDropdownMenuDefaults.TrailingIcon(
+                            expanded = expanded
+                        )
                     }
                 }
             )
@@ -1011,6 +987,28 @@ fun SelectorScreen(
                     DropdownMenuItem(
                         text = {
                             Text(suggestion)
+                        },
+
+                        trailingIcon = {
+                            if (vm.mode == "group") {
+                                IconButton(
+                                    onClick = {
+                                        vm.toggleFavoriteGroup(suggestion)
+                                    }
+                                ) {
+                                    Icon(
+                                        if (vm.isFavoriteGroup(suggestion))
+                                            Icons.Default.Star
+                                        else
+                                            Icons.Default.StarBorder,
+                                        contentDescription =
+                                            if (vm.isFavoriteGroup(suggestion))
+                                                "Убрать из избранного"
+                                            else
+                                                "Добавить в избранное"
+                                    )
+                                }
+                            }
                         },
 
                         onClick = {
