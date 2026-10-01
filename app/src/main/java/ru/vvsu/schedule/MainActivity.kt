@@ -42,6 +42,8 @@ import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import java.io.File
+import java.security.MessageDigest
 
 data class Lesson(
     val date: LocalDate,
@@ -56,6 +58,7 @@ data class Lesson(
 class MainViewModel : ViewModel() {
 
     private var preferences: android.content.SharedPreferences? = null
+    private var appContext: Context? = null
 
     var selectedGroup by mutableStateOf("")
     var selectedTeacher by mutableStateOf("")
@@ -85,6 +88,8 @@ class MainViewModel : ViewModel() {
     fun init(context: Context) {
 
         if (preferences != null) return
+
+        appContext = context.applicationContext
 
         preferences = context.getSharedPreferences(
             "timetable_settings",
@@ -232,15 +237,28 @@ class MainViewModel : ViewModel() {
 
     private val cacheMaxAgeMs = 14L * 24L * 60L * 60L * 1000L
 
-    private fun currentCachePrefix(): String {
+    private fun cacheFile(): File? {
+        val context = appContext ?: return null
         val source = if (mode == "group") selectedGroup else selectedTeacher
-        return "schedule_cache_${mode}_${source}"
+        if (source.isBlank()) return null
+
+        val hash = MessageDigest
+            .getInstance("SHA-256")
+            .digest(source.trim().toByteArray())
+            .joinToString("") { "%02x".format(it) }
+
+        val directory = File(context.filesDir, "schedule_cache")
+        if (!directory.exists()) {
+            directory.mkdirs()
+        }
+
+        return File(directory, "${mode}_$hash.json")
     }
 
     private fun saveScheduleToCache(result: List<Lesson>) {
-        val p = preferences ?: return
         if (result.isEmpty()) return
 
+        val file = cacheFile() ?: return
         val array = JSONArray()
 
         result.forEach { lesson ->
@@ -257,27 +275,28 @@ class MainViewModel : ViewModel() {
             )
         }
 
-        val prefix = currentCachePrefix()
-
-        p.edit()
-            .putString("${prefix}_data", array.toString())
-            .putLong("${prefix}_time", System.currentTimeMillis())
-            .apply()
+        try {
+            val temporary = File(file.parentFile, "${file.name}.tmp")
+            temporary.writeText(array.toString(), Charsets.UTF_8)
+            if (file.exists()) file.delete()
+            temporary.renameTo(file)
+        } catch (_: Exception) {
+            // Кэш не должен ломать отображение расписания.
+        }
     }
 
     private fun loadScheduleFromCache(): List<Lesson>? {
-        val p = preferences ?: return null
-        val prefix = currentCachePrefix()
-        val savedAt = p.getLong("${prefix}_time", 0L)
+        val file = cacheFile() ?: return null
+        if (!file.exists()) return null
 
-        if (savedAt <= 0L || System.currentTimeMillis() - savedAt > cacheMaxAgeMs) {
+        val age = System.currentTimeMillis() - file.lastModified()
+        if (age < 0L || age > cacheMaxAgeMs) {
+            file.delete()
             return null
         }
 
-        val raw = p.getString("${prefix}_data", null) ?: return null
-
         return try {
-            val array = JSONArray(raw)
+            val array = JSONArray(file.readText(Charsets.UTF_8))
             buildList {
                 for (i in 0 until array.length()) {
                     val item = array.getJSONObject(i)
@@ -338,24 +357,33 @@ class MainViewModel : ViewModel() {
 
                 if (result.isNotEmpty()) {
                     saveScheduleToCache(result)
-                }
-
-                allLessons = result
-                lessons = result
-                    .filter { it.date == date }
-                    .sortedBy { it.time }
-
-                loading = false
-
-                if (result.isEmpty()) {
-
-                    error =
-                        if (mode == "group") {
+                    allLessons = result
+                    lessons = result
+                        .filter { it.date == date }
+                        .sortedBy { it.time }
+                    cacheNotice = null
+                    error = null
+                } else {
+                    val cached = loadScheduleFromCache()
+                    if (cached != null) {
+                        allLessons = cached
+                        lessons = cached
+                            .filter { it.date == date }
+                            .sortedBy { it.time }
+                        cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+                        error = null
+                    } else {
+                        allLessons = emptyList()
+                        lessons = emptyList()
+                        error = if (mode == "group") {
                             "Расписание группы не найдено."
                         } else {
                             "Расписание преподавателя не найдено."
                         }
+                    }
                 }
+
+                loading = false
 
             } catch (e: Exception) {
 
