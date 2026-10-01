@@ -18,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -71,6 +72,7 @@ class MainViewModel : ViewModel() {
     var error by mutableStateOf<String?>(null)
     var lessons by mutableStateOf<List<Lesson>>(emptyList())
     var suggestions by mutableStateOf<List<String>>(emptyList())
+    var favoriteGroups by mutableStateOf<Set<String>>(emptySet())
 
     private var suggestionsJob: Job? = null
     private val repository = VvsuRepository()
@@ -106,6 +108,11 @@ class MainViewModel : ViewModel() {
 
         themeColor =
             p.getString("theme_color", "blue") ?: "blue"
+
+        favoriteGroups =
+            p.getStringSet("favorite_groups", emptySet())
+                ?.toSet()
+                ?: emptySet()
     }
 
     private fun saveSettings() {
@@ -122,6 +129,7 @@ class MainViewModel : ViewModel() {
                 notificationsEnabled
             )
             ?.putString("theme_color", themeColor)
+            ?.putStringSet("favorite_groups", favoriteGroups)
             ?.apply()
     }
 
@@ -152,6 +160,24 @@ class MainViewModel : ViewModel() {
 
     fun setTeacher(value: String) {
         selectedTeacher = value.trim()
+        saveSettings()
+    }
+
+    fun isFavoriteGroup(group: String): Boolean {
+        return favoriteGroups.contains(group.trim())
+    }
+
+    fun toggleFavoriteGroup(group: String) {
+        val cleanGroup = group.trim()
+        if (cleanGroup.isBlank()) return
+
+        favoriteGroups =
+            if (favoriteGroups.contains(cleanGroup)) {
+                favoriteGroups - cleanGroup
+            } else {
+                favoriteGroups + cleanGroup
+            }
+
         saveSettings()
     }
 
@@ -941,10 +967,34 @@ fun SelectorScreen(
                 singleLine = true,
 
                 trailingIcon = {
-                    if (vm.suggestions.isNotEmpty()) {
-                        ExposedDropdownMenuDefaults.TrailingIcon(
-                            expanded = expanded
-                        )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (vm.mode == "group" && text.trim().isNotBlank()) {
+                            IconButton(
+                                onClick = {
+                                    vm.toggleFavoriteGroup(text)
+                                }
+                            ) {
+                                Icon(
+                                    if (vm.isFavoriteGroup(text))
+                                        Icons.Default.Star
+                                    else
+                                        Icons.Default.StarBorder,
+                                    contentDescription =
+                                        if (vm.isFavoriteGroup(text))
+                                            "Убрать из избранного"
+                                        else
+                                            "Добавить в избранное"
+                                )
+                            }
+                        }
+
+                        if (vm.suggestions.isNotEmpty()) {
+                            ExposedDropdownMenuDefaults.TrailingIcon(
+                                expanded = expanded
+                            )
+                        }
                     }
                 }
             )
@@ -997,6 +1047,59 @@ fun SelectorScreen(
         ) {
 
             Text("Выбрать")
+        }
+
+        if (vm.mode == "group" && vm.favoriteGroups.isNotEmpty()) {
+            Spacer(
+                Modifier.height(24.dp)
+            )
+
+            Text(
+                "Избранные группы",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+
+            Spacer(
+                Modifier.height(8.dp)
+            )
+
+            vm.favoriteGroups
+                .sorted()
+                .forEach { group ->
+                    ListItem(
+                        headlineContent = {
+                            Text(group)
+                        },
+                        leadingContent = {
+                            Icon(
+                                Icons.Default.Star,
+                                contentDescription = "Избранная группа"
+                            )
+                        },
+                        trailingContent = {
+                            IconButton(
+                                onClick = {
+                                    vm.toggleFavoriteGroup(group)
+                                }
+                            ) {
+                                Icon(
+                                    Icons.Default.Star,
+                                    contentDescription = "Убрать из избранного"
+                                )
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                text = group
+                                vm.setGroup(group)
+                                vm.clearSuggestions()
+                                vm.loadSchedule()
+                                onBack()
+                            }
+                    )
+                }
         }
 
         Spacer(
