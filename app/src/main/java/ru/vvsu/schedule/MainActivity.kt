@@ -892,6 +892,7 @@ fun ScheduleScreen(
                     }
                 ) {
                     Text(
+                        vm.date.format(
                             DateTimeFormatter.ofPattern(
                                 "d MMMM, EEEE",
                                 Locale("ru")
