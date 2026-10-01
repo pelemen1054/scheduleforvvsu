@@ -596,7 +596,6 @@ fun ScheduleScreen(
     modifier: Modifier,
     onShowSelector: () -> Unit
 ) {
-
     PullToRefreshBox(
         isRefreshing = vm.loading,
         onRefresh = {
@@ -609,492 +608,196 @@ fun ScheduleScreen(
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = vm.mode == "group",
+                    onClick = {
+                        vm.selectMode("group")
+                    },
+                    label = {
+                        Text("👥 Группа")
+                    }
+                )
+
+                FilterChip(
+                    selected = vm.mode == "teacher",
+                    onClick = {
+                        vm.selectMode("teacher")
+                    },
+                    label = {
+                        Text("👨‍🏫 Преподаватель")
+                    }
+                )
+            }
+
+            Spacer(
+                Modifier.height(10.dp)
+            )
+
+            OutlinedCard(
+                onClick = onShowSelector,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        Modifier.weight(1f)
+                    ) {
+                        Text(
+                            if (vm.mode == "group")
+                                "Группа"
+                            else
+                                "Преподаватель",
+                            style = MaterialTheme.typography.labelMedium
+                        )
+
+                        Text(
+                            if (vm.mode == "group") {
+                                vm.selectedGroup.ifBlank {
+                                    "Не выбрана"
+                                }
+                            } else {
+                                vm.selectedTeacher.ifBlank {
+                                    "Не выбран"
+                                }
+                            },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        null
+                    )
+                }
+            }
+
+            Spacer(
+                Modifier.height(14.dp)
+            )
 
             Row(
                 Modifier.fillMaxWidth(),
-            horizontalArrangement =
-                Arrangement.spacedBy(8.dp)
-        ) {
-
-            FilterChip(
-                selected =
-                    vm.mode == "group",
-
-                onClick = {
-                    vm.selectMode("group")
-                },
-
-                label = {
-                    Text("👥 Группа")
-                }
-            )
-
-            FilterChip(
-                selected =
-                    vm.mode == "teacher",
-
-                onClick = {
-                    vm.selectMode("teacher")
-                },
-
-                label = {
-                    Text("👨‍🏫 Преподаватель")
-                }
-            )
-        }
-
-        Spacer(
-            Modifier.height(10.dp)
-        )
-
-        OutlinedCard(
-            onClick = onShowSelector,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-
-            Row(
-                Modifier.padding(16.dp),
-                verticalAlignment =
-                    Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
-
-                Column(
-                    Modifier.weight(1f)
-                ) {
-
-                    Text(
-                        if (vm.mode == "group")
-                            "Группа"
-                        else
-                            "Преподаватель",
-                        style =
-                            MaterialTheme.typography.labelMedium
-                    )
-
-                    Text(
-                        if (vm.mode == "group") {
-
-                            vm.selectedGroup.ifBlank {
-                                "Не выбрана"
-                            }
-
-                        } else {
-
-                            vm.selectedTeacher.ifBlank {
-                                "Не выбран"
-                            }
-                        },
-
-                        style =
-                            MaterialTheme.typography.titleMedium,
-
-                        fontWeight =
-                            FontWeight.SemiBold
-                    )
-                }
-
-                Icon(
-                    Icons.Default.ChevronRight,
-                    null
-                )
-            }
-        }
-
-        Spacer(
-            Modifier.height(14.dp)
-        )
-
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment =
-                Alignment.CenterVertically,
-            horizontalArrangement =
-                Arrangement.SpaceBetween
-        ) {
-
-            IconButton(
-                onClick = {
-                    vm.changeDate(
-                        vm.date.minusDays(1)
-                    )
-                }
-            ) {
-
-                Icon(
-                    Icons.Default.ChevronLeft,
-                    "Предыдущий день"
-                )
-            }
-
-            TextButton(
-                onClick = {
-                    vm.changeDate(
-                        LocalDate.now()
-                    )
-                }
-            ) {
-
-                Text(
-                    vm.date.format(
-                        DateTimeFormatter.ofPattern(
-                            "d MMMM, EEEE",
-                            Locale("ru")
-                        )
-                    )
-                )
-            }
-
-            IconButton(
-                onClick = {
-                    vm.changeDate(
-                        vm.date.plusDays(1)
-                    )
-                }
-            ) {
-
-                Icon(
-                    Icons.Default.ChevronRight,
-                    "Следующий день"
-                )
-            }
-        }
-
-        HorizontalDivider()
-
-        when {
-
-            vm.loading -> {
-
-                Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-
-                    CircularProgressIndicator()
-                }
-            }
-
-            vm.error != null -> {
-
-                Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-
-                    Text(
-                        vm.error ?: "",
-                        modifier =
-                            Modifier.padding(24.dp)
-                    )
-                }
-            }
-
-            vm.lessons.isEmpty() -> {
-
-                Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-
-                    Text(
-                        if (
-                            (
-                                vm.mode == "group" &&
-                                    vm.selectedGroup.isBlank()
-                            ) ||
-                            (
-                                vm.mode == "teacher" &&
-                                    vm.selectedTeacher.isBlank()
-                            )
-                        ) {
-                            "Выберите группу или преподавателя"
-                        } else {
-                            "На этот день занятий нет"
-                        }
-                    )
-                }
-            }
-
-            else -> {
-
-                LazyColumn(
-                    verticalArrangement =
-                        Arrangement.spacedBy(10.dp),
-
-                    contentPadding =
-                        PaddingValues(
-                            vertical = 12.dp
-                        )
-                ) {
-
-                    items(vm.lessons) {
-                        LessonCard(it)
+                IconButton(
+                    onClick = {
+                        vm.changeDate(vm.date.minusDays(1))
                     }
-                }
-fun ScheduleScreen(
-    vm: MainViewModel,
-    modifier: Modifier,
-    onShowSelector: () -> Unit
-) {
-
-    PullToRefreshBox(
-        isRefreshing = vm.loading,
-        onRefresh = {
-            vm.loadSchedule()
-        },
-        modifier = modifier.fillMaxSize()
-    ) {
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(16.dp)
-        ) {
-
-            Row(
-                Modifier.fillMaxWidth(),
-            horizontalArrangement =
-                Arrangement.spacedBy(8.dp)
-        ) {
-
-            FilterChip(
-                selected =
-                    vm.mode == "group",
-
-                onClick = {
-                    vm.selectMode("group")
-                },
-
-                label = {
-                    Text("👥 Группа")
-                }
-            )
-
-            FilterChip(
-                selected =
-                    vm.mode == "teacher",
-
-                onClick = {
-                    vm.selectMode("teacher")
-                },
-
-                label = {
-                    Text("👨‍🏫 Преподаватель")
-                }
-            )
-        }
-
-        Spacer(
-            Modifier.height(10.dp)
-        )
-
-        OutlinedCard(
-            onClick = onShowSelector,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-
-            Row(
-                Modifier.padding(16.dp),
-                verticalAlignment =
-                    Alignment.CenterVertically
-            ) {
-
-                Column(
-                    Modifier.weight(1f)
                 ) {
-
-                    Text(
-                        if (vm.mode == "group")
-                            "Группа"
-                        else
-                            "Преподаватель",
-                        style =
-                            MaterialTheme.typography.labelMedium
-                    )
-
-                    Text(
-                        if (vm.mode == "group") {
-
-                            vm.selectedGroup.ifBlank {
-                                "Не выбрана"
-                            }
-
-                        } else {
-
-                            vm.selectedTeacher.ifBlank {
-                                "Не выбран"
-                            }
-                        },
-
-                        style =
-                            MaterialTheme.typography.titleMedium,
-
-                        fontWeight =
-                            FontWeight.SemiBold
+                    Icon(
+                        Icons.Default.ChevronLeft,
+                        "Предыдущий день"
                     )
                 }
 
-                Icon(
-                    Icons.Default.ChevronRight,
-                    null
-                )
-            }
-        }
-
-        Spacer(
-            Modifier.height(14.dp)
-        )
-
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment =
-                Alignment.CenterVertically,
-            horizontalArrangement =
-                Arrangement.SpaceBetween
-        ) {
-
-            IconButton(
-                onClick = {
-                    vm.changeDate(
-                        vm.date.minusDays(1)
-                    )
-                }
-            ) {
-
-                Icon(
-                    Icons.Default.ChevronLeft,
-                    "Предыдущий день"
-                )
-            }
-
-            TextButton(
-                onClick = {
-                    vm.changeDate(
-                        LocalDate.now()
-                    )
-                }
-            ) {
-
-                Text(
-                    vm.date.format(
-                        DateTimeFormatter.ofPattern(
-                            "d MMMM, EEEE",
-                            Locale("ru")
-                        )
-                    )
-                )
-            }
-
-            IconButton(
-                onClick = {
-                    vm.changeDate(
-                        vm.date.plusDays(1)
-                    )
-                }
-            ) {
-
-                Icon(
-                    Icons.Default.ChevronRight,
-                    "Следующий день"
-                )
-            }
-        }
-
-        HorizontalDivider()
-
-        when {
-
-            vm.loading -> {
-
-                Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
+                TextButton(
+                    onClick = {
+                        vm.changeDate(LocalDate.now())
+                    }
                 ) {
-
-                    CircularProgressIndicator()
-                }
-            }
-
-            vm.error != null -> {
-
-                Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-
                     Text(
-                        vm.error ?: "",
-                        modifier =
-                            Modifier.padding(24.dp)
-                    )
-                }
-            }
-
-            vm.lessons.isEmpty() -> {
-
-                Box(
-                    Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-
-                    Text(
-                        if (
-                            (
-                                vm.mode == "group" &&
-                                    vm.selectedGroup.isBlank()
-                            ) ||
-                            (
-                                vm.mode == "teacher" &&
-                                    vm.selectedTeacher.isBlank()
+                        vm.date.format(
+                            DateTimeFormatter.ofPattern(
+                                "d MMMM, EEEE",
+                                Locale("ru")
                             )
-                        ) {
-                            "Выберите группу или преподавателя"
-                        } else {
-                            "На этот день занятий нет"
-                        }
+                        )
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        vm.changeDate(vm.date.plusDays(1))
+                    }
+                ) {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        "Следующий день"
                     )
                 }
             }
 
-            else -> {
+            HorizontalDivider()
 
-                LazyColumn(
-                    verticalArrangement =
-                        Arrangement.spacedBy(10.dp),
-
-                    contentPadding =
-                        PaddingValues(
-                            vertical = 12.dp
-                        )
-                ) {
-
-                    items(vm.lessons) {
-                        LessonCard(it)
+            when {
+                vm.loading -> {
+                    Box(
+                        Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
                     }
                 }
 
+                vm.error != null -> {
+                    Box(
+                        Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            vm.error ?: "",
+                            modifier = Modifier.padding(24.dp)
+                        )
+                    }
+                }
+
+                vm.lessons.isEmpty() -> {
+                    Box(
+                        Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (
+                                (vm.mode == "group" &&
+                                    vm.selectedGroup.isBlank()) ||
+                                (vm.mode == "teacher" &&
+                                    vm.selectedTeacher.isBlank())
+                            ) {
+                                "Выберите группу или преподавателя"
+                            } else {
+                                "На этот день занятий нет"
+                            }
+                        )
+                    }
+                }
+
+                else -> {
+                    LazyColumn(
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        contentPadding = PaddingValues(vertical = 12.dp)
+                    ) {
+                        items(vm.lessons) {
+                            LessonCard(it)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun LessonCard(
     lesson: Lesson
 ) {
-
     ElevatedCard(
         Modifier.fillMaxWidth()
     ) {
-
         Column(
             Modifier.padding(16.dp)
         ) {
-
             Text(
                 lesson.time,
-                style =
-                    MaterialTheme.typography.titleMedium,
-                fontWeight =
-                    FontWeight.Bold
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
 
             Spacer(
@@ -1103,8 +806,7 @@ fun ScheduleScreen(
 
             Text(
                 lesson.subject,
-                style =
-                    MaterialTheme.typography.titleLarge
+                style = MaterialTheme.typography.titleLarge
             )
 
             Spacer(
