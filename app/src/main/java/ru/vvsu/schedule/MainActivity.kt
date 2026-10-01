@@ -74,6 +74,7 @@ class MainViewModel : ViewModel() {
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var lessons by mutableStateOf<List<Lesson>>(emptyList())
+    private var allLessons by mutableStateOf<List<Lesson>>(emptyList())
     var suggestions by mutableStateOf<List<String>>(emptyList())
     var favoriteGroups by mutableStateOf<Set<String>>(emptySet())
     var cacheNotice by mutableStateOf<String?>(null)
@@ -117,6 +118,22 @@ class MainViewModel : ViewModel() {
             p.getStringSet("favorite_groups", emptySet())
                 ?.toSet()
                 ?: emptySet()
+
+        val cached = loadScheduleFromCache()
+        if (cached != null) {
+            allLessons = cached
+            lessons = cached
+                .filter { it.date == date }
+                .sortedBy { it.time }
+            cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+        }
+
+        if (
+            (mode == "group" && selectedGroup.isNotBlank()) ||
+            (mode == "teacher" && selectedTeacher.isNotBlank())
+        ) {
+            loadSchedule()
+        }
     }
 
     private fun saveSettings() {
@@ -213,7 +230,7 @@ class MainViewModel : ViewModel() {
         suggestions = emptyList()
     }
 
-    private val cacheMaxAgeMs = 7L * 24L * 60L * 60L * 1000L
+    private val cacheMaxAgeMs = 14L * 24L * 60L * 60L * 1000L
 
     private fun currentCachePrefix(): String {
         val source = if (mode == "group") selectedGroup else selectedTeacher
@@ -323,13 +340,10 @@ class MainViewModel : ViewModel() {
                     saveScheduleToCache(result)
                 }
 
+                allLessons = result
                 lessons = result
-                    .filter {
-                        it.date == date
-                    }
-                    .sortedBy {
-                        it.time
-                    }
+                    .filter { it.date == date }
+                    .sortedBy { it.time }
 
                 loading = false
 
@@ -350,15 +364,12 @@ class MainViewModel : ViewModel() {
                 loading = false
 
                 if (cached != null) {
+                    allLessons = cached
                     lessons = cached
-                        .filter {
-                            it.date == date
-                        }
-                        .sortedBy {
-                            it.time
-                        }
+                        .filter { it.date == date }
+                        .sortedBy { it.time }
 
-                    cacheNotice = "Показано сохранённое расписание. Оно хранится 7 дней."
+                    cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
                     error = null
                 } else {
                     lessons = emptyList()
@@ -382,7 +393,10 @@ class MainViewModel : ViewModel() {
 
     fun changeDate(newDate: LocalDate) {
         date = newDate
-        loadSchedule()
+        error = null
+        lessons = allLessons
+            .filter { it.date == newDate }
+            .sortedBy { it.time }
     }
 
     fun selectMode(newMode: String) {
@@ -390,8 +404,19 @@ class MainViewModel : ViewModel() {
         mode = newMode
         saveSettings()
 
+        allLessons = emptyList()
         lessons = emptyList()
         error = null
+        cacheNotice = null
+
+        val cached = loadScheduleFromCache()
+        if (cached != null) {
+            allLessons = cached
+            lessons = cached
+                .filter { it.date == date }
+                .sortedBy { it.time }
+            cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+        }
 
         if (
             (newMode == "group" &&
@@ -833,15 +858,6 @@ fun ScheduleScreen(
             }
 
             when {
-                vm.loading -> {
-                    Box(
-                        Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-
                 vm.error != null -> {
                     Box(
                         Modifier.fillMaxSize(),
@@ -851,6 +867,15 @@ fun ScheduleScreen(
                             vm.error ?: "",
                             modifier = Modifier.padding(24.dp)
                         )
+                    }
+                }
+
+                vm.loading && vm.lessons.isEmpty() -> {
+                    Box(
+                        Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
                     }
                 }
 
