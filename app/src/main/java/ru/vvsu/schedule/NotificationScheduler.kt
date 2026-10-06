@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -85,7 +86,12 @@ object NotificationScheduler {
         }
         val pending = PendingIntent.getBroadcast(context, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val trigger = notifyAt.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
-        context.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pending)
+        val alarmManager = context.getSystemService(AlarmManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && alarmManager.canScheduleExactAlarms()) {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pending)
+        } else {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pending)
+        }
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val ids = prefs.getStringSet(IDS, emptySet()).orEmpty().toMutableSet()
         ids.add(requestCode.toString())
@@ -125,7 +131,7 @@ class LessonNotificationReceiver : BroadcastReceiver() {
         val manager = context.getSystemService(NotificationManager::class.java)
         val notification = NotificationCompat.Builder(context, "lesson_reminders")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Расписание ВВГУ • $time")
+            .setContentTitle("Напоминание о паре!")
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
