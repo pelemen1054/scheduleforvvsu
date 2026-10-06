@@ -196,19 +196,19 @@ class MainViewModel : ViewModel() {
         scheduleNotifications()
     }
 
-    fun setNotificationLeadMinutes(value: Int) {
+    fun updateNotificationLeadMinutes(value: Int) {
         notificationLeadMinutes = value.coerceAtLeast(1)
         saveSettings()
         scheduleNotifications()
     }
 
-    fun setNotifyBeforeLesson(value: Boolean) {
+    fun updateNotifyBeforeLesson(value: Boolean) {
         notifyBeforeLesson = value
         saveSettings()
         scheduleNotifications()
     }
 
-    fun setNotifyAfterLongWindow(value: Boolean) {
+    fun updateNotifyAfterLongWindow(value: Boolean) {
         notifyAfterLongWindow = value
         saveSettings()
         scheduleNotifications()
@@ -1671,7 +1671,7 @@ fun SettingsScreen(
                     DropdownMenuItem(
                         text = { Text(title) },
                         onClick = {
-                            vm.setNotificationLeadMinutes(minutes)
+                            vm.updateNotificationLeadMinutes(minutes)
                             notificationLeadExpanded = false
                         }
                     )
@@ -1686,7 +1686,7 @@ fun SettingsScreen(
                 Text("До начала пары", fontWeight = FontWeight.Medium)
                 Text("Напоминать о первой паре в блоке занятий")
             }
-            Switch(checked = vm.notifyBeforeLesson, onCheckedChange = { vm.setNotifyBeforeLesson(it) })
+            Switch(checked = vm.notifyBeforeLesson, onCheckedChange = { vm.updateNotifyBeforeLesson(it) })
         }
 
         Spacer(Modifier.height(8.dp))
@@ -1696,7 +1696,7 @@ fun SettingsScreen(
                 Text("Большие окна", fontWeight = FontWeight.Medium)
                 Text("Напоминать о паре после окна от 30 минут")
             }
-            Switch(checked = vm.notifyAfterLongWindow, onCheckedChange = { vm.setNotifyAfterLongWindow(it) })
+            Switch(checked = vm.notifyAfterLongWindow, onCheckedChange = { vm.updateNotifyAfterLongWindow(it) })
         }
 
         Spacer(
