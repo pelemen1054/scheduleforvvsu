@@ -76,6 +76,10 @@ class MainViewModel : ViewModel() {
 
     var notificationsEnabled by mutableStateOf(true)
 
+    var notificationLeadMinutes by mutableStateOf(30)
+    var notifyBeforeLesson by mutableStateOf(true)
+    var notifyAfterLongWindow by mutableStateOf(true)
+
     var themeColor by mutableStateOf("blue")
 
     var loading by mutableStateOf(false)
@@ -120,6 +124,10 @@ class MainViewModel : ViewModel() {
         notificationsEnabled =
             p.getBoolean("notifications", true)
 
+        notificationLeadMinutes = p.getInt("notification_lead_minutes", 30)
+        notifyBeforeLesson = p.getBoolean("notify_before_lesson", true)
+        notifyAfterLongWindow = p.getBoolean("notify_after_long_window", true)
+
         themeColor =
             p.getString("theme_color", "blue") ?: "blue"
 
@@ -135,6 +143,7 @@ class MainViewModel : ViewModel() {
                 .filter { it.date == date }
                 .sortedBy { it.time }
             cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+            scheduleNotifications()
         }
 
         if (
@@ -158,7 +167,9 @@ class MainViewModel : ViewModel() {
                 "notifications",
                 notificationsEnabled
             )
-            ?.putString("notification_time", notificationTime)
+            ?.putInt("notification_lead_minutes", notificationLeadMinutes)
+            ?.putBoolean("notify_before_lesson", notifyBeforeLesson)
+            ?.putBoolean("notify_after_long_window", notifyAfterLongWindow)
             ?.putString("theme_color", themeColor)
             ?.putStringSet("favorite_groups", favoriteGroups)
             ?.apply()
@@ -180,13 +191,39 @@ class MainViewModel : ViewModel() {
     }
 
     fun setNotifications(value: Boolean) {
-    notificationsEnabled = value
-    saveSettings()
+        notificationsEnabled = value
+        saveSettings()
+        scheduleNotifications()
     }
 
-    fun setNotificationTime(value: String) {
-        notificationTime = value
+    fun setNotificationLeadMinutes(value: Int) {
+        notificationLeadMinutes = value.coerceAtLeast(1)
         saveSettings()
+        scheduleNotifications()
+    }
+
+    fun setNotifyBeforeLesson(value: Boolean) {
+        notifyBeforeLesson = value
+        saveSettings()
+        scheduleNotifications()
+    }
+
+    fun setNotifyAfterLongWindow(value: Boolean) {
+        notifyAfterLongWindow = value
+        saveSettings()
+        scheduleNotifications()
+    }
+
+    private fun scheduleNotifications() {
+        val context = appContext ?: return
+        NotificationScheduler.schedule(
+            context = context,
+            lessons = allLessons,
+            enabled = notificationsEnabled,
+            leadMinutes = notificationLeadMinutes,
+            notifyBeforeLesson = notifyBeforeLesson,
+            notifyAfterLongWindow = notifyAfterLongWindow
+        )
     }
 
     fun setGroup(value: String) {
@@ -373,6 +410,7 @@ class MainViewModel : ViewModel() {
                         .sortedBy { it.time }
                     cacheNotice = null
                     error = null
+                    scheduleNotifications()
                 } else {
                     val cached = loadScheduleFromCache()
                     if (cached != null) {
@@ -382,6 +420,7 @@ class MainViewModel : ViewModel() {
                             .sortedBy { it.time }
                         cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
                         error = null
+                        scheduleNotifications()
                     } else {
                         allLessons = emptyList()
                         lessons = emptyList()
@@ -409,6 +448,7 @@ class MainViewModel : ViewModel() {
 
                     cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
                     error = null
+                    scheduleNotifications()
                 } else {
                     lessons = emptyList()
 
@@ -1594,34 +1634,69 @@ fun SettingsScreen(
             )
         }
 
-        var notificationTimeExpanded by remember { mutableStateOf(false) }
+        var notificationLeadExpanded by remember { mutableStateOf(false) }
 
         Box(Modifier.fillMaxWidth()) {
             OutlinedButton(
-                onClick = { notificationTimeExpanded = true },
+                onClick = { notificationLeadExpanded = true },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Icon(Icons.Default.Schedule, null)
                 Spacer(Modifier.width(8.dp))
-                Text("Время уведомлений: ${vm.notificationTime}")
+                Text(
+                    "За " + when (vm.notificationLeadMinutes) {
+                        60 -> "1 час"
+                        90 -> "1 ч 30 мин"
+                        120 -> "2 часа"
+                        else -> vm.notificationLeadMinutes.toString() + " мин"
+                    }
+                )
                 Spacer(Modifier.weight(1f))
                 Icon(Icons.Default.ArrowDropDown, null)
             }
 
             DropdownMenu(
-                expanded = notificationTimeExpanded,
-                onDismissRequest = { notificationTimeExpanded = false }
+                expanded = notificationLeadExpanded,
+                onDismissRequest = { notificationLeadExpanded = false }
             ) {
-                listOf("07:00", "07:30", "08:00", "08:30", "09:00", "09:30", "10:00").forEach { time ->
+                listOf(
+                    5 to "5 минут",
+                    10 to "10 минут",
+                    15 to "15 минут",
+                    30 to "30 минут",
+                    60 to "1 час",
+                    90 to "1 час 30 минут",
+                    120 to "2 часа"
+                ).forEach { (minutes, title) ->
                     DropdownMenuItem(
-                        text = { Text(time) },
+                        text = { Text(title) },
                         onClick = {
-                            vm.setNotificationTime(time)
-                            notificationTimeExpanded = false
+                            vm.setNotificationLeadMinutes(minutes)
+                            notificationLeadExpanded = false
                         }
                     )
                 }
             }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("До начала пары", fontWeight = FontWeight.Medium)
+                Text("Напоминать о первой паре в блоке занятий")
+            }
+            Switch(checked = vm.notifyBeforeLesson, onCheckedChange = { vm.setNotifyBeforeLesson(it) })
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Большие окна", fontWeight = FontWeight.Medium)
+                Text("Напоминать о паре после окна от 30 минут")
+            }
+            Switch(checked = vm.notifyAfterLongWindow, onCheckedChange = { vm.setNotifyAfterLongWindow(it) })
         }
 
         Spacer(
