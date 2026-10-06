@@ -158,6 +158,7 @@ class MainViewModel : ViewModel() {
                 "notifications",
                 notificationsEnabled
             )
+            ?.putString("notification_time", notificationTime)
             ?.putString("theme_color", themeColor)
             ?.putStringSet("favorite_groups", favoriteGroups)
             ?.apply()
@@ -181,6 +182,11 @@ class MainViewModel : ViewModel() {
     fun setNotifications(value: Boolean) {
     notificationsEnabled = value
     saveSettings()
+    }
+
+    fun setNotificationTime(value: String) {
+        notificationTime = value
+        saveSettings()
     }
 
     fun setGroup(value: String) {
@@ -1586,6 +1592,36 @@ fun SettingsScreen(
                     vm.setNotifications(it)
                 }
             )
+        }
+
+        var notificationTimeExpanded by remember { mutableStateOf(false) }
+
+        Box(Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = { notificationTimeExpanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Schedule, null)
+                Spacer(Modifier.width(8.dp))
+                Text("Время уведомлений: ${vm.notificationTime}")
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Default.ArrowDropDown, null)
+            }
+
+            DropdownMenu(
+                expanded = notificationTimeExpanded,
+                onDismissRequest = { notificationTimeExpanded = false }
+            ) {
+                listOf("07:00", "07:30", "08:00", "08:30", "09:00", "09:30", "10:00").forEach { time ->
+                    DropdownMenuItem(
+                        text = { Text(time) },
+                        onClick = {
+                            vm.setNotificationTime(time)
+                            notificationTimeExpanded = false
+                        }
+                    )
+                }
+            }
         }
 
         Spacer(
