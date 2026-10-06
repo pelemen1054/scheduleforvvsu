@@ -1594,109 +1594,109 @@ fun SettingsScreen(
             Modifier.height(12.dp)
         )
 
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
+        var notificationDialogVisible by remember { mutableStateOf(false) }
 
-            Icon(
-                Icons.Default.Notifications,
-                null
-            )
+        ListItem(
+            headlineContent = { Text("Уведомления", fontWeight = FontWeight.Medium) },
+            supportingContent = {
+                Text(if (vm.notificationsEnabled) "Настроить напоминания о занятиях" else "Отключены")
+            },
+            leadingContent = { Icon(Icons.Default.Notifications, null) },
+            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { notificationDialogVisible = true }
+        )
 
-            Spacer(
-                Modifier.width(16.dp)
-            )
-
-            Column(
-                Modifier.weight(1f)
-            ) {
-
-                Text(
-                    "Уведомления",
-                    fontWeight =
-                        FontWeight.Medium
-                )
-
-                Text(
-                    "Напоминания о занятиях"
-                )
-            }
-
-            Switch(
-                checked =
-                    vm.notificationsEnabled,
-
-                onCheckedChange = {
-                    vm.setNotifications(it)
-                }
-            )
-        }
-
-        var notificationLeadExpanded by remember { mutableStateOf(false) }
-
-        Box(Modifier.fillMaxWidth()) {
-            OutlinedButton(
-                onClick = { notificationLeadExpanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Icon(Icons.Default.Schedule, null)
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "За " + when (vm.notificationLeadMinutes) {
-                        60 -> "1 час"
-                        90 -> "1 ч 30 мин"
-                        120 -> "2 часа"
-                        else -> vm.notificationLeadMinutes.toString() + " мин"
-                    }
-                )
-                Spacer(Modifier.weight(1f))
-                Icon(Icons.Default.ArrowDropDown, null)
-            }
-
-            DropdownMenu(
-                expanded = notificationLeadExpanded,
-                onDismissRequest = { notificationLeadExpanded = false }
-            ) {
-                listOf(
-                    5 to "5 минут",
-                    10 to "10 минут",
-                    15 to "15 минут",
-                    30 to "30 минут",
-                    60 to "1 час",
-                    90 to "1 час 30 минут",
-                    120 to "2 часа"
-                ).forEach { (minutes, title) ->
-                    DropdownMenuItem(
-                        text = { Text(title) },
-                        onClick = {
-                            vm.updateNotificationLeadMinutes(minutes)
-                            notificationLeadExpanded = false
+        if (notificationDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { notificationDialogVisible = false },
+                title = { Text("Уведомления") },
+                text = {
+                    Column {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Полное отключение")
+                                Text("Не получать напоминания о парах", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Switch(
+                                checked = !vm.notificationsEnabled,
+                                onCheckedChange = { vm.setNotifications(!it) }
+                            )
                         }
-                    )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        var leadExpanded by remember { mutableStateOf(false) }
+                        Box(Modifier.fillMaxWidth()) {
+                            OutlinedButton(
+                                onClick = { leadExpanded = true },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                                    Text("Время напоминания")
+                                    Text(
+                                        "За " + when (vm.notificationLeadMinutes) {
+                                            60 -> "1 час"
+                                            90 -> "1 ч 30 мин"
+                                            120 -> "2 часа"
+                                            else -> vm.notificationLeadMinutes.toString() + " мин"
+                                        },
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                Icon(Icons.Default.ArrowDropDown, null)
+                            }
+                            DropdownMenu(
+                                expanded = leadExpanded,
+                                onDismissRequest = { leadExpanded = false }
+                            ) {
+                                listOf(
+                                    5 to "5 минут",
+                                    10 to "10 минут",
+                                    15 to "15 минут",
+                                    30 to "30 минут",
+                                    60 to "1 час",
+                                    90 to "1 час 30 минут",
+                                    120 to "2 часа"
+                                ).forEach { (minutes, title) ->
+                                    DropdownMenuItem(
+                                        text = { Text(title) },
+                                        onClick = {
+                                            vm.updateNotificationLeadMinutes(minutes)
+                                            leadExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text("Уведомления между окнами")
+                                Text("Напоминать о паре после окна от 30 минут", style = MaterialTheme.typography.bodySmall)
+                            }
+                            Switch(
+                                checked = vm.notifyAfterLongWindow,
+                                onCheckedChange = { vm.updateNotifyAfterLongWindow(it) }
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { notificationDialogVisible = false }) {
+                        Text("Готово")
+                    }
                 }
-            }
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("До начала пары", fontWeight = FontWeight.Medium)
-                Text("Напоминать о первой паре в блоке занятий")
-            }
-            Switch(checked = vm.notifyBeforeLesson, onCheckedChange = { vm.updateNotifyBeforeLesson(it) })
-        }
-
-        Spacer(Modifier.height(8.dp))
-
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Большие окна", fontWeight = FontWeight.Medium)
-                Text("Напоминать о паре после окна от 30 минут")
-            }
-            Switch(checked = vm.notifyAfterLongWindow, onCheckedChange = { vm.updateNotifyAfterLongWindow(it) })
+            )
         }
 
         HorizontalDivider(
