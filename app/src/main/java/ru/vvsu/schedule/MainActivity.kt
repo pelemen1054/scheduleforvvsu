@@ -1699,41 +1699,66 @@ fun SettingsScreen(
             Switch(checked = vm.notifyAfterLongWindow, onCheckedChange = { vm.updateNotifyAfterLongWindow(it) })
         }
 
-        Spacer(
-            Modifier.height(16.dp)
+        HorizontalDivider(
+            Modifier.padding(vertical = 16.dp)
         )
 
-
-
-        Spacer(
-            Modifier.height(8.dp)
+        Text(
+            "Полезное",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
         )
 
-        Button(
+        Spacer(Modifier.height(4.dp))
+
+        TextButton(
             onClick = {
-                val intent = Intent(
-                    Intent.ACTION_VIEW,
-                    Uri.parse("https://www.vvsu.ru/")
+                context.startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://www.vvsu.ru/")
+                    )
                 )
-                context.startActivity(intent)
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(
-                Icons.Default.Language,
-                null
-            )
-
-            Spacer(
-                Modifier.width(8.dp)
-            )
-
+            Icon(Icons.Default.Language, null)
+            Spacer(Modifier.width(8.dp))
             Text("Официальный сайт ВВГУ")
         }
 
-        Spacer(
-            Modifier.height(16.dp)
+        TextButton(
+            onClick = {
+                context.startActivity(
+                    Intent(
+                        Intent.ACTION_VIEW,
+                        Uri.parse("https://github.com/pelemen1054/scheduleforvvsu")
+                    )
+                )
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(Icons.Default.Code, null)
+            Spacer(Modifier.width(8.dp))
+            Text("GitHub проекта")
+        }
+
+        Text(
+            "Поддержка в Telegram будет добавлена после подключения бота.",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
         )
+
+        Spacer(Modifier.height(12.dp))
+
+        Text(
+            "ВВГУ — Расписание • версия 1.0.0",
+            style = MaterialTheme.typography.bodySmall,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        )
+
+        Spacer(Modifier.height(16.dp))
     }
 }
 
