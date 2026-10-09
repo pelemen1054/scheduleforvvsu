@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.net.Uri
+import android.provider.Settings
 import org.json.JSONArray
 import org.json.JSONObject
 import androidx.activity.ComponentActivity
@@ -213,6 +214,8 @@ class MainViewModel : ViewModel() {
         saveSettings()
         scheduleNotifications()
     }
+
+    fun refreshNotifications() { scheduleNotifications() }
 
     private fun scheduleNotifications() {
         val context = appContext ?: return
@@ -1672,6 +1675,31 @@ fun SettingsScreen(
                                     )
                                 }
                             }
+                        }
+
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                            Spacer(Modifier.height(12.dp))
+                            OutlinedButton(
+                                onClick = {
+                                    val alarmManager = context.getSystemService(android.app.AlarmManager::class.java)
+                                    if (!alarmManager.canScheduleExactAlarms()) {
+                                        val settingsIntent = Intent(
+                                            Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                                            Uri.parse("package:" + context.packageName)
+                                        )
+                                        context.startActivity(settingsIntent)
+                                    } else {
+                                        vm.refreshNotifications()
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Разрешить точные уведомления")
+                            }
+                            Text(
+                                "Разрешение помогает Android показывать напоминания ближе к выбранному времени.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
                         }
 
                         Spacer(Modifier.height(12.dp))
