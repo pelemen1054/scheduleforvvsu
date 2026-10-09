@@ -1764,45 +1764,47 @@ fun SettingsScreen(
             fontWeight = FontWeight.Bold
         )
 
-        Spacer(Modifier.height(4.dp))
+        Spacer(Modifier.height(8.dp))
 
-        TextButton(
-            onClick = {
-                context.startActivity(
-                    Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("https://www.vvsu.ru/")
-                    )
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(Icons.Default.Language, null)
-            Spacer(Modifier.width(8.dp))
-            Text("Официальный сайт ВВГУ")
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/")))
+                    },
+                    modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                ) {
+                    Icon(Icons.Default.Language, contentDescription = "Официальный сайт ВВГУ")
+                }
+                Text("Сайт", style = MaterialTheme.typography.labelSmall)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/pelemen1054/scheduleforvvsu")))
+                    },
+                    modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                ) {
+                    Icon(Icons.Default.Code, contentDescription = "GitHub проекта")
+                }
+                Text("GitHub", style = MaterialTheme.typography.labelSmall)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/VVSUTimtableSupportBot")))
+                    },
+                    modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = "Поддержка в Telegram")
+                }
+                Text("Поддержка", style = MaterialTheme.typography.labelSmall)
+            }
         }
-
-        TextButton(
-            onClick = {
-                context.startActivity(
-                    Intent(
-                        Intent.ACTION_VIEW,
-                        Uri.parse("https://github.com/pelemen1054/scheduleforvvsu")
-                    )
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Icon(Icons.Default.Code, null)
-            Spacer(Modifier.width(8.dp))
-            Text("GitHub проекта")
-        }
-
-        Text(
-            "Поддержка в Telegram будет добавлена после подключения бота.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
-        )
 
         Spacer(Modifier.height(12.dp))
 
