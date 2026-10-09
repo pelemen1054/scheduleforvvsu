@@ -31,6 +31,8 @@ import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.rememberDatePickerState
 import java.time.ZoneId
 import androidx.compose.runtime.*
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -216,6 +218,15 @@ class MainViewModel : ViewModel() {
     }
 
     fun refreshNotifications() { scheduleNotifications() }
+
+    fun clearScheduleCache() {
+        val directory = appContext?.let { File(it.filesDir, "schedule_cache") } ?: return
+        directory.listFiles()?.forEach { it.delete() }
+        allLessons = emptyList()
+        lessons = emptyList()
+        cacheNotice = null
+        error = "Кэш расписания очищен."
+    }
 
     private fun scheduleNotifications() {
         val context = appContext ?: return
@@ -627,6 +638,16 @@ fun App(
         darkTheme = vm.darkTheme,
         colorName = vm.themeColor
     ) {
+
+        SideEffect {
+            val activity = context as? ComponentActivity
+            activity?.window?.statusBarColor = MaterialTheme.colorScheme.surface.toArgb()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                @Suppress("DEPRECATION")
+                activity?.window?.decorView?.systemUiVisibility =
+                    if (vm.darkTheme) 0 else android.view.View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+            }
+        }
 
         Scaffold(
             snackbarHost = {
@@ -1323,6 +1344,11 @@ fun SettingsScreen(
     onSelectTeacher: () -> Unit
 ) {
     val context = LocalContext.current
+    var versionTapCount by remember { mutableIntStateOf(0) }
+    var passwordDialogVisible by remember { mutableStateOf(false) }
+    var developerModeVisible by remember { mutableStateOf(false) }
+    var developerPassword by remember { mutableStateOf("") }
+    var passwordError by remember { mutableStateOf(false) }
     
     Column(
         modifier
@@ -1780,11 +1806,78 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
 
         Text(
-            "ВВГУ — Расписание • версия 1.0.0",
+            "ВВГУ timetable • версия 1.0.1",
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().clickable {
+                versionTapCount++
+                if (versionTapCount >= 5) {
+                    versionTapCount = 0
+                    developerPassword = ""
+                    passwordError = false
+                    passwordDialogVisible = true
+                }
+            },
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+
+        if (passwordDialogVisible) {
+            AlertDialog(
+                onDismissRequest = { passwordDialogVisible = false },
+                title = { Text("Режим разработчика") },
+                text = {
+                    Column {
+                        Text("Введите пароль для доступа.")
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = developerPassword,
+                            onValueChange = { developerPassword = it; passwordError = false },
+                            label = { Text("Пароль") },
+                            singleLine = true,
+                            isError = passwordError
+                        )
+                        if (passwordError) Text("Неверный пароль", color = MaterialTheme.colorScheme.error)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        if (developerPassword == "105401") {
+                            passwordDialogVisible = false
+                            developerModeVisible = true
+                        } else passwordError = true
+                    }) { Text("Войти") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { passwordDialogVisible = false }) { Text("Отмена") }
+                }
+            )
+        }
+
+        if (developerModeVisible) {
+            AlertDialog(
+                onDismissRequest = { developerModeVisible = false },
+                title = { Text("Инструменты разработчика") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Версия: 1.0.1 (код 2)")
+                        Text("Режим: " + if (vm.mode == "group") "Группа" else "Преподаватель")
+                        Text("Выбрано: " + if (vm.mode == "group") vm.selectedGroup.ifBlank { "нет" } else vm.selectedTeacher.ifBlank { "нет" })
+                        Text("Занятий на выбранную дату: " + vm.lessons.size)
+                        OutlinedButton(onClick = { vm.loadSchedule() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Принудительно обновить расписание")
+                        }
+                        OutlinedButton(onClick = { vm.refreshNotifications() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Перепланировать уведомления")
+                        }
+                        OutlinedButton(onClick = { vm.clearScheduleCache() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Очистить локальный кэш")
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { developerModeVisible = false }) { Text("Закрыть") }
+                }
+            )
+        }
 
         Spacer(Modifier.height(16.dp))
     }
