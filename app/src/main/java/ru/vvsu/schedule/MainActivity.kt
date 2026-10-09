@@ -1806,7 +1806,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
 
         Text(
-            "ВВГУ timetable • версия 1.0.1",
+            "ВВГУ timetable • версия 1.0.2",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth().clickable {
                 versionTapCount++
@@ -1858,7 +1858,7 @@ fun SettingsScreen(
                 title = { Text("Инструменты разработчика") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Версия: 1.0.1 (код 2)")
+                        Text("Версия: 1.0.2 (код 3)")
                         Text("Режим: " + if (vm.mode == "group") "Группа" else "Преподаватель")
                         Text("Выбрано: " + if (vm.mode == "group") vm.selectedGroup.ifBlank { "нет" } else vm.selectedTeacher.ifBlank { "нет" })
                         Text("Занятий на выбранную дату: " + vm.lessons.size)
