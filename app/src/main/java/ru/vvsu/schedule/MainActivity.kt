@@ -639,9 +639,10 @@ fun App(
         colorName = vm.themeColor
     ) {
 
+        val statusBarColor = MaterialTheme.colorScheme.surface.toArgb()
         SideEffect {
             val activity = context as? ComponentActivity
-            activity?.window?.statusBarColor = MaterialTheme.colorScheme.surface.toArgb()
+            activity?.window?.statusBarColor = statusBarColor
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 @Suppress("DEPRECATION")
                 activity?.window?.decorView?.systemUiVisibility =
