@@ -1811,7 +1811,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
 
         Text(
-            "ВВГУ timetable • версия 1.0.3",
+            "ВВГУ timetable • версия 1.0.4",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth().clickable {
                 versionTapCount++
@@ -1863,15 +1863,18 @@ fun SettingsScreen(
                 title = { Text("Инструменты разработчика") },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text("Версия: 1.0.3 (код 4)")
+                        Text("Версия: 1.0.4 (код 5)")
                         Text("Режим: " + if (vm.mode == "group") "Группа" else "Преподаватель")
                         Text("Выбрано: " + if (vm.mode == "group") vm.selectedGroup.ifBlank { "нет" } else vm.selectedTeacher.ifBlank { "нет" })
                         Text("Занятий на выбранную дату: " + vm.lessons.size)
                         OutlinedButton(onClick = { vm.loadSchedule() }, modifier = Modifier.fillMaxWidth()) {
                             Text("Принудительно обновить расписание")
                         }
-                        OutlinedButton(onClick = { vm.refreshNotifications() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Перепланировать уведомления")
+                        OutlinedButton(
+                            onClick = { NotificationScheduler.showTestNotification(context) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Принудительно вызвать уведомление")
                         }
                         OutlinedButton(onClick = { vm.clearScheduleCache() }, modifier = Modifier.fillMaxWidth()) {
                             Text("Очистить локальный кэш")
