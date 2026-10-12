@@ -7,6 +7,9 @@ on:
       - main
       - master
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -27,14 +30,38 @@ jobs:
           unzip -q gradle-8.13-bin.zip -d "$HOME/gradle"
 
       - name: Build APK
+        id: build_apk
         run: |
           "$HOME/gradle/gradle-8.13/bin/gradle" :app:assembleDebug --no-daemon
           VERSION_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
           VERSION_CODE=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
           cp app/build/outputs/apk/debug/app-debug.apk VVSU_timetable.apk
+          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "Built VVSU timetable version ${VERSION_NAME} (code ${VERSION_CODE})"
 
-      - name: Upload APK
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.build_apk.outputs.version_name }}
+          name: ВВГУ timetable v${{ steps.build_apk.outputs.version_name }}
+          target_commitish: ${{ github.sha }}
+          body: |
+            ## ВВГУ timetable v${{ steps.build_apk.outputs.version_name }}
+
+            Android-приложение для просмотра расписания ВВГУ.
+
+            - Версия приложения: ${{ steps.build_apk.outputs.version_name }}
+            - Код версии: ${{ steps.build_apk.outputs.version_code }}
+            - APK прикреплён к этому релизу как `VVSU_timetable.apk`.
+
+            Подробности и инструкция по установке находятся в [README](https://github.com/${{ github.repository }}/blob/main/README.md).
+          files: VVSU_timetable.apk
+          overwrite_files: true
+          make_latest: true
+          fail_on_unmatched_files: true
+
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: VVSU_timetable_v${{ github.run_number }}
