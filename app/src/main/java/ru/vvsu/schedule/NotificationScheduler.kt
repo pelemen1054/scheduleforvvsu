@@ -22,6 +22,20 @@ object NotificationScheduler {
     private const val GAP_THRESHOLD_MINUTES = 30L
     private const val CONTINUOUS_GAP_MINUTES = 15L
 
+    fun showTestNotification(context: Context) {
+        createChannel(context)
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val text = "Тестовое уведомление работает."
+        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("ВВГУ timetable — проверка")
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+            .build()
+        manager.notify(105401, notification)
+    }
+
     fun schedule(
         context: Context,
         lessons: List<Lesson>,
