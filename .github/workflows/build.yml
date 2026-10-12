@@ -29,10 +29,13 @@ jobs:
       - name: Build APK
         run: |
           "$HOME/gradle/gradle-8.13/bin/gradle" :app:assembleDebug --no-daemon
+          VERSION_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          VERSION_CODE=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' app/build.gradle.kts | head -n 1)
           cp app/build/outputs/apk/debug/app-debug.apk VVSU_timetable.apk
+          echo "Built VVSU timetable version ${VERSION_NAME} (code ${VERSION_CODE})"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VVSU_timetable
+          name: VVSU_timetable_v${{ github.run_number }}
           path: VVSU_timetable.apk
