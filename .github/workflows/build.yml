@@ -17,6 +17,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 17
         uses: actions/setup-java@v5
@@ -40,22 +42,38 @@ jobs:
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
           echo "Built VVSU timetable version ${VERSION_NAME} (code ${VERSION_CODE})"
 
+      - name: Generate full changelog
+        id: changelog
+        env:
+          VERSION_NAME: ${{ steps.build_apk.outputs.version_name }}
+        run: |
+          PREVIOUS_TAG=$(git tag --list 'v*' --sort=-version:refname | grep -vx "v${VERSION_NAME}" | head -n 1 || true)
+          {
+            echo "## Полный журнал изменений"
+            echo
+            if [ -n "$PREVIOUS_TAG" ]; then
+              echo "Изменения с релиза `$PREVIOUS_TAG`:"
+              echo
+              git log --no-merges --pretty=format:'- %s (`%h`)' "$PREVIOUS_TAG..HEAD"
+            else
+              echo "Изменения с начала истории проекта:"
+              echo
+              git log --no-merges --pretty=format:'- %s (`%h`)' HEAD
+            fi
+            echo
+            echo
+            echo "---"
+            echo
+            echo "APK: `VVSU_timetable.apk`"
+          } > RELEASE_NOTES.md
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.build_apk.outputs.version_name }}
           name: ВВГУ timetable v${{ steps.build_apk.outputs.version_name }}
           target_commitish: ${{ github.sha }}
-          body: |
-            ## ВВГУ timetable v${{ steps.build_apk.outputs.version_name }}
-
-            Android-приложение для просмотра расписания ВВГУ.
-
-            - Версия приложения: ${{ steps.build_apk.outputs.version_name }}
-            - Код версии: ${{ steps.build_apk.outputs.version_code }}
-            - APK прикреплён к этому релизу как `VVSU_timetable.apk`.
-
-            Подробности и инструкция по установке находятся в [README](https://github.com/${{ github.repository }}/blob/main/README.md).
+          body_path: RELEASE_NOTES.md
           files: VVSU_timetable.apk
           overwrite_files: true
           make_latest: true
