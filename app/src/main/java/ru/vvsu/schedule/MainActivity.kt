@@ -52,7 +52,9 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.io.File
-import java.security.MessageDigest\nimport javax.crypto.SecretKeyFactory\nimport javax.crypto.spec.PBEKeySpec
+import java.security.MessageDigest
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.PBEKeySpec
 
 data class Lesson(
     val date: LocalDate,
