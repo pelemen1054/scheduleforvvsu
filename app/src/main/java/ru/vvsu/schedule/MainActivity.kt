@@ -1071,7 +1071,7 @@ fun ScheduleScreen(
 fun LessonCard(
     lesson: Lesson
 ) {
-    var expanded by remember(lesson.id()) { mutableStateOf(false) }
+    var expanded by remember(lesson) { mutableStateOf(false) }
 
     ElevatedCard(
         onClick = { expanded = !expanded },
