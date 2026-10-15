@@ -1510,10 +1510,6 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Button(
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary
-            ),
                         onClick = {
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
