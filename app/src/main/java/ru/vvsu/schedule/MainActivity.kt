@@ -48,6 +48,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -96,6 +98,9 @@ class MainViewModel : ViewModel() {
     var suggestions by mutableStateOf<List<String>>(emptyList())
     var favoriteGroups by mutableStateOf<Set<String>>(emptySet())
     var cacheNotice by mutableStateOf<String?>(null)
+    var latestVersion by mutableStateOf<String?>(null)
+    var latestReleaseUrl by mutableStateOf("https://github.com/pelemen1054/scheduleforvvsu/releases/latest")
+    var updateAvailable by mutableStateOf(false)
 
     private var suggestionsJob: Job? = null
     private val repository = VvsuRepository()
@@ -105,6 +110,7 @@ class MainViewModel : ViewModel() {
         if (preferences != null) return
 
         appContext = context.applicationContext
+        checkForUpdates()
 
         preferences = context.getSharedPreferences(
             "timetable_settings",
@@ -159,6 +165,49 @@ class MainViewModel : ViewModel() {
         ) {
             loadSchedule()
         }
+    }
+
+    fun checkForUpdates() {
+        viewModelScope.launch {
+            val release = withContext(Dispatchers.IO) {
+                try {
+                    val json = org.jsoup.Jsoup.connect(
+                        "https://api.github.com/repos/pelemen1054/scheduleforvvsu/releases/latest"
+                    )
+                        .ignoreContentType(true)
+                        .userAgent("VVSU-timetable-Android")
+                        .timeout(8000)
+                        .get()
+                        .text()
+                    val data = JSONObject(json)
+                    val tag = data.optString("tag_name").removePrefix("v")
+                    val url = data.optString(
+                        "html_url",
+                        "https://github.com/pelemen1054/scheduleforvvsu/releases/latest"
+                    )
+                    if (tag.isBlank()) null else tag to url
+                } catch (_: Exception) {
+                    null
+                }
+            }
+
+            if (release != null) {
+                latestVersion = release.first
+                latestReleaseUrl = release.second
+                val currentParts = BuildConfig.VERSION_NAME.split(".").map { it.toIntOrNull() ?: 0 }
+                val latestParts = release.first.split(".").map { it.toIntOrNull() ?: 0 }
+                updateAvailable = compareVersions(latestParts, currentParts) > 0
+            }
+        }
+    }
+
+    private fun compareVersions(latest: List<Int>, current: List<Int>): Int {
+        for (i in 0 until maxOf(latest.size, current.size)) {
+            val a = latest.getOrElse(i) { 0 }
+            val b = current.getOrElse(i) { 0 }
+            if (a != b) return a.compareTo(b)
+        }
+        return 0
     }
 
     private fun saveSettings() {
@@ -561,8 +610,11 @@ fun TimetableTheme(
         if (darkTheme) {
             darkColorScheme(
                 primary = primary,
+                onPrimary = Color.White,
                 secondary = primary,
+                onSecondary = Color.White,
                 tertiary = primary,
+                onTertiary = Color.White,
                 primaryContainer = accentContainer,
                 secondaryContainer = accentContainer,
                 tertiaryContainer = accentContainer
@@ -1411,6 +1463,52 @@ fun SettingsScreen(
             .padding(16.dp)
     ) {
 
+        if (vm.updateAvailable) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
+                        )
+                    },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        "Доступна новая версия!",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Версия ${vm.latestVersion} уже опубликована на GitHub.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(
+                        onClick = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Text("Скачать обновление")
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+        }
+
         Text(
             "Оформление",
             style =
@@ -1449,6 +1547,11 @@ fun SettingsScreen(
             }
 
             Switch(
+                colors = SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+                    checkedBorderColor = MaterialTheme.colorScheme.primary
+                ),
                 checked =
                     vm.darkTheme,
 
