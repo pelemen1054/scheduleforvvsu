@@ -899,6 +899,9 @@ fun ScheduleScreen(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(
+                    colors = TextButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),
                     onClick = {
                         pickerState.selectedDateMillis?.let { millis ->
                             val selected = java.time.Instant.ofEpochMilli(millis)
@@ -913,7 +916,10 @@ fun ScheduleScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) {
+                TextButton(
+                    colors = TextButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),onClick = { showDatePicker = false }) {
                     Text("Отмена")
                 }
             }
@@ -939,6 +945,12 @@ fun ScheduleScreen(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 FilterChip(
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimary,
+                        selectedTrailingIconColor = MaterialTheme.colorScheme.onPrimary
+                    ),
                     selected = vm.mode == "group",
                     onClick = {
                         vm.selectMode("group")
@@ -1025,6 +1037,9 @@ fun ScheduleScreen(
                 }
 
                 TextButton(
+                    colors = TextButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),
                     onClick = {
                         showDatePicker = true
                     }
@@ -1324,6 +1339,10 @@ fun SelectorScreen(
         )
 
         Button(
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
             onClick = {
 
                 if (vm.mode == "group") {
@@ -1491,6 +1510,10 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Button(
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
                         onClick = {
                             context.startActivity(
                                 Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
@@ -1588,6 +1611,9 @@ fun SettingsScreen(
         Box {
 
             OutlinedButton(
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
                 onClick = {
                     expanded = true
                 }
@@ -1684,6 +1710,10 @@ fun SettingsScreen(
         )
 
         Button(
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
             onClick = onSelectGroup,
             modifier =
                 Modifier.fillMaxWidth()
@@ -1723,6 +1753,10 @@ fun SettingsScreen(
         )
 
         Button(
+            colors = ButtonDefaults.buttonColors(
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary
+            ),
             onClick = onSelectTeacher,
             modifier =
                 Modifier.fillMaxWidth()
@@ -1817,6 +1851,9 @@ fun SettingsScreen(
                         var leadExpanded by remember { mutableStateOf(false) }
                         Box(Modifier.fillMaxWidth()) {
                             OutlinedButton(
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
                                 onClick = { leadExpanded = true },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
@@ -1861,6 +1898,9 @@ fun SettingsScreen(
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                             Spacer(Modifier.height(12.dp))
                             OutlinedButton(
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
                                 onClick = {
                                     val alarmManager = context.getSystemService(android.app.AlarmManager::class.java)
                                     if (!alarmManager.canScheduleExactAlarms()) {
@@ -1901,7 +1941,10 @@ fun SettingsScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { notificationDialogVisible = false }) {
+                    TextButton(
+                    colors = TextButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),onClick = { notificationDialogVisible = false }) {
                         Text("Готово")
                     }
                 }
@@ -1996,7 +2039,10 @@ fun SettingsScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = {
+                    TextButton(
+                    colors = TextButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),onClick = {
                         if (isDeveloperPasswordValid(developerPassword)) {
                             passwordDialogVisible = false
                             developerPassword = ""
@@ -2005,7 +2051,10 @@ fun SettingsScreen(
                     }) { Text("Войти") }
                 },
                 dismissButton = {
-                    TextButton(onClick = { passwordDialogVisible = false }) { Text("Отмена") }
+                    TextButton(
+                    colors = TextButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),onClick = { passwordDialogVisible = false }) { Text("Отмена") }
                 }
             )
         }
@@ -2020,22 +2069,34 @@ fun SettingsScreen(
                         Text("Режим: " + if (vm.mode == "group") "Группа" else "Преподаватель")
                         Text("Выбрано: " + if (vm.mode == "group") vm.selectedGroup.ifBlank { "нет" } else vm.selectedTeacher.ifBlank { "нет" })
                         Text("Занятий на выбранную дату: " + vm.lessons.size)
-                        OutlinedButton(onClick = { vm.loadSchedule() }, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),onClick = { vm.loadSchedule() }, modifier = Modifier.fillMaxWidth()) {
                             Text("Принудительно обновить расписание")
                         }
                         OutlinedButton(
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
                             onClick = { NotificationScheduler.showTestNotification(context) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Принудительно вызвать уведомление")
                         }
-                        OutlinedButton(onClick = { vm.clearScheduleCache() }, modifier = Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),onClick = { vm.clearScheduleCache() }, modifier = Modifier.fillMaxWidth()) {
                             Text("Очистить локальный кэш")
                         }
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { developerModeVisible = false }) { Text("Закрыть") }
+                    TextButton(
+                    colors = TextButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),onClick = { developerModeVisible = false }) { Text("Закрыть") }
                 }
             )
         }
