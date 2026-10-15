@@ -899,7 +899,7 @@ fun ScheduleScreen(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
                 TextButton(
-                    colors = TextButtonDefaults.textButtonColors(
+                    colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),
                     onClick = {
@@ -917,7 +917,7 @@ fun ScheduleScreen(
             },
             dismissButton = {
                 TextButton(
-                    colors = TextButtonDefaults.textButtonColors(
+                    colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = { showDatePicker = false }) {
                     Text("Отмена")
@@ -1037,7 +1037,7 @@ fun ScheduleScreen(
                 }
 
                 TextButton(
-                    colors = TextButtonDefaults.textButtonColors(
+                    colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),
                     onClick = {
@@ -1953,7 +1953,7 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(
-                    colors = TextButtonDefaults.textButtonColors(
+                    colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = { notificationDialogVisible = false }) {
                         Text("Готово")
@@ -2051,7 +2051,7 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(
-                    colors = TextButtonDefaults.textButtonColors(
+                    colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = {
                         if (isDeveloperPasswordValid(developerPassword)) {
@@ -2063,7 +2063,7 @@ fun SettingsScreen(
                 },
                 dismissButton = {
                     TextButton(
-                    colors = TextButtonDefaults.textButtonColors(
+                    colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = { passwordDialogVisible = false }) { Text("Отмена") }
                 }
@@ -2105,7 +2105,7 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(
-                    colors = TextButtonDefaults.textButtonColors(
+                    colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = { developerModeVisible = false }) { Text("Закрыть") }
                 }
