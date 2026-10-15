@@ -1795,7 +1795,12 @@ fun SettingsScreen(
             }
 
             Switch(
-                checked =
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+                                        checkedBorderColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    checked =
                     vm.autoRefresh,
 
                 onCheckedChange = {
@@ -1837,7 +1842,12 @@ fun SettingsScreen(
                                 Text("Не получать напоминания о парах", style = MaterialTheme.typography.bodySmall)
                             }
                             Switch(
-                                checked = !vm.notificationsEnabled,
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+                                        checkedBorderColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    checked = !vm.notificationsEnabled,
                                 onCheckedChange = { vm.setNotifications(!it) }
                             )
                         }
@@ -1930,7 +1940,12 @@ fun SettingsScreen(
                                 Text("Напоминать о паре после окна от 30 минут", style = MaterialTheme.typography.bodySmall)
                             }
                             Switch(
-                                checked = vm.notifyAfterLongWindow,
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
+                                        checkedBorderColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    checked = vm.notifyAfterLongWindow,
                                 onCheckedChange = { vm.updateNotifyAfterLongWindow(it) }
                             )
                         }
