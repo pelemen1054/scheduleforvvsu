@@ -52,7 +52,7 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.io.File
-import java.security.MessageDigest
+import java.security.MessageDigest\nimport javax.crypto.SecretKeyFactory\nimport javax.crypto.spec.PBEKeySpec
 
 data class Lesson(
     val date: LocalDate,
@@ -554,14 +554,25 @@ fun TimetableTheme(
             Color(0xFF1565C0)
     }
 
+    val accentContainer = primary.copy(alpha = if (darkTheme) 0.24f else 0.14f)
     val scheme =
         if (darkTheme) {
             darkColorScheme(
-                primary = primary
+                primary = primary,
+                secondary = primary,
+                tertiary = primary,
+                primaryContainer = accentContainer,
+                secondaryContainer = accentContainer,
+                tertiaryContainer = accentContainer
             )
         } else {
             lightColorScheme(
-                primary = primary
+                primary = primary,
+                secondary = primary,
+                tertiary = primary,
+                primaryContainer = accentContainer,
+                secondaryContainer = accentContainer,
+                tertiaryContainer = accentContainer
             )
         }
 
@@ -1060,45 +1071,60 @@ fun ScheduleScreen(
 fun LessonCard(
     lesson: Lesson
 ) {
+    var expanded by remember(lesson.id()) { mutableStateOf(false) }
+
     ElevatedCard(
-        Modifier.fillMaxWidth()
+        onClick = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(
-            Modifier.padding(16.dp)
+            Modifier.padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
-            Text(
-                lesson.time,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            Spacer(
-                Modifier.height(5.dp)
-            )
-
-            Text(
-                lesson.subject,
-                style = MaterialTheme.typography.titleLarge
-            )
-
-            Spacer(
-                Modifier.height(8.dp)
-            )
-
-            if (lesson.teacher.isNotBlank()) {
-                Text("👤 ${lesson.teacher}")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        lesson.time,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        lesson.subject,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = if (expanded) Int.MAX_VALUE else 2
+                    )
+                    if (!expanded && lesson.room.isNotBlank()) {
+                        Text(
+                            "🏫 ${lesson.room}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Свернуть информацию о паре" else "Показать полную информацию о паре",
+                    tint = MaterialTheme.colorScheme.primary
+                )
             }
 
-            if (lesson.type.isNotBlank()) {
-                Text("🎓 ${lesson.type}")
-            }
-
-            if (lesson.room.isNotBlank()) {
-                Text("🏫 ${lesson.room}")
-            }
-
-            if (lesson.group.isNotBlank()) {
-                Text("👥 ${lesson.group}")
+            if (expanded) {
+                HorizontalDivider(Modifier.padding(vertical = 8.dp))
+                if (lesson.teacher.isNotBlank()) Text("👤 ${lesson.teacher}")
+                if (lesson.type.isNotBlank()) Text("🎓 ${lesson.type}")
+                if (lesson.room.isNotBlank()) Text("🏫 ${lesson.room}")
+                if (lesson.group.isNotBlank()) Text("👥 ${lesson.group}")
+                Text(
+                    "Нажмите, чтобы свернуть",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
             }
         }
     }
@@ -1336,6 +1362,27 @@ fun SelectorScreen(
         )
 
 
+    }
+}
+
+private fun isDeveloperPasswordValid(password: String): Boolean {
+    // Пароль не хранится в исходном коде открытым текстом.
+    // PBKDF2 затрудняет подбор по сравнению с обычным сравнением строки.
+    val salt = "VVSU-Schedule-DevMode-v1".toByteArray(Charsets.UTF_8)
+    val expectedHash = "91f204a6d87ad66ae9526deec6ff477db7ca6a78a6f8342279c79643c25b430f"
+    val spec = PBEKeySpec(password.toCharArray(), salt, 120_000, 256)
+    return try {
+        val hash = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            .generateSecret(spec).encoded
+            .joinToString("") { "%02x".format(it) }
+        MessageDigest.isEqual(
+            hash.toByteArray(Charsets.UTF_8),
+            expectedHash.toByteArray(Charsets.UTF_8)
+        )
+    } catch (_: Exception) {
+        false
+    } finally {
+        spec.clearPassword()
     }
 }
 
@@ -1845,8 +1892,9 @@ fun SettingsScreen(
                 },
                 confirmButton = {
                     TextButton(onClick = {
-                        if (developerPassword == "105401") {
+                        if (isDeveloperPasswordValid(developerPassword)) {
                             passwordDialogVisible = false
+                            developerPassword = ""
                             developerModeVisible = true
                         } else passwordError = true
                     }) { Text("Войти") }
