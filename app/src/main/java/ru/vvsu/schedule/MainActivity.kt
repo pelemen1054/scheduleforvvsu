@@ -2025,7 +2025,7 @@ fun SettingsScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
                     onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/"))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/")))
                     },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
