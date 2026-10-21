@@ -6,7 +6,7 @@
 
 ## 📥 Скачать приложение
 
-**[Скачать последнюю версию ВВГУ Timetable](https://github.com/pelemen1054/scheduleforvvsu/releases/latest/download/VVSU_timetable.apk)**
+**[Скачать последнюю версию ВВГУ Timetable](https://github.com/pelemen1054/scheduleforvvsu/releases/latest/download/VVSU_timetable_v1.0.9.apk)**
 
 [Все версии и журнал изменений](https://github.com/pelemen1054/scheduleforvvsu/releases)
 
