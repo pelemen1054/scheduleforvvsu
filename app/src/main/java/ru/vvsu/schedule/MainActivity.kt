@@ -90,6 +90,7 @@ class MainViewModel : ViewModel() {
     var notifyAfterLongWindow by mutableStateOf(true)
 
     var themeColor by mutableStateOf("blue")
+    var language by mutableStateOf("ru")
 
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -143,6 +144,7 @@ class MainViewModel : ViewModel() {
 
         themeColor =
             p.getString("theme_color", "blue") ?: "blue"
+        language = p.getString("language", "ru") ?: "ru"
 
         favoriteGroups =
             p.getStringSet("favorite_groups", emptySet())
@@ -227,6 +229,7 @@ class MainViewModel : ViewModel() {
             ?.putBoolean("notify_before_lesson", notifyBeforeLesson)
             ?.putBoolean("notify_after_long_window", notifyAfterLongWindow)
             ?.putString("theme_color", themeColor)
+            ?.putString("language", language)
             ?.putStringSet("favorite_groups", favoriteGroups)
             ?.apply()
     }
@@ -237,8 +240,13 @@ class MainViewModel : ViewModel() {
     }
 
     fun updateThemeColor(value: String) {
-    themeColor = value
-    saveSettings()
+        themeColor = value
+        saveSettings()
+    }
+
+    fun updateLanguage(value: String) {
+        language = value
+        saveSettings()
     }
 
     fun updateAutoRefresh(value: Boolean) {
@@ -1438,6 +1446,12 @@ fun SelectorScreen(
     }
 }
 
+private fun localized(language: String, russian: String, english: String, chinese: String): String = when (language) {
+    "en" -> english
+    "zh" -> chinese
+    else -> russian
+}
+
 private fun isDeveloperPasswordValid(password: String): Boolean {
     // Пароль не хранится в исходном коде открытым текстом.
     // PBKDF2 затрудняет подбор по сравнению с обычным сравнением строки.
@@ -1472,6 +1486,7 @@ fun SettingsScreen(
     var developerModeVisible by remember { mutableStateOf(false) }
     var developerPassword by remember { mutableStateOf("") }
     var passwordError by remember { mutableStateOf(false) }
+    var showTestUpdateBanner by remember { mutableStateOf(false) }
     
     Column(
         modifier
@@ -1482,7 +1497,7 @@ fun SettingsScreen(
             .padding(16.dp)
     ) {
 
-        if (vm.updateAvailable) {
+        if (vm.updateAvailable || showTestUpdateBanner) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1500,13 +1515,13 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        "Доступна новая версия!",
+                        if (showTestUpdateBanner && !vm.updateAvailable) "Тест: доступно обновление!" else localized(vm.language, "Доступна новая версия!", "Update available!", "发现新版本！"),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
                     Text(
-                        "Версия ${vm.latestVersion} уже опубликована на GitHub.",
+                        if (showTestUpdateBanner && !vm.updateAvailable) "Это тестовая плашка обновления." else localized(vm.language, "Версия ${vm.latestVersion} уже опубликована на GitHub.", "Version ${vm.latestVersion} is available on GitHub.", "版本 ${vm.latestVersion} 已在 GitHub 发布。"),
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Button(
@@ -1521,7 +1536,7 @@ fun SettingsScreen(
                             contentColor = MaterialTheme.colorScheme.onPrimary
                         )
                     ) {
-                        Text("Скачать обновление")
+                        Text(localized(vm.language, "Скачать обновление", "Download update", "下载更新"))
                     }
                 }
             }
@@ -1529,7 +1544,7 @@ fun SettingsScreen(
         }
 
         Text(
-            "Оформление",
+            localized(vm.language, "Оформление", "Appearance", "外观"),
             style =
                 MaterialTheme.typography.titleMedium,
             fontWeight =
@@ -1552,13 +1567,13 @@ fun SettingsScreen(
                 Modifier.weight(1f)
             ) {
 
-                Text("Тема")
+                Text(localized(vm.language, "Тема", "Theme", "主题"))
 
                 Text(
                     if (vm.darkTheme)
-                        "Тёмная"
+                        localized(vm.language, "Тёмная", "Dark", "深色")
                     else
-                        "Светлая",
+                        localized(vm.language, "Светлая", "Light", "浅色"),
 
                     style =
                         MaterialTheme.typography.bodySmall
@@ -1585,7 +1600,7 @@ fun SettingsScreen(
         )
 
         Text(
-            "Цвет",
+            localized(vm.language, "Цвет", "Accent color", "主题颜色"),
             style =
                 MaterialTheme.typography.labelLarge
         )
@@ -1662,8 +1677,25 @@ fun SettingsScreen(
             )
         )
 
+        var languageExpanded by remember { mutableStateOf(false) }
+        Text(localized(vm.language, "Язык приложения", "App language", "应用语言"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Spacer(Modifier.height(8.dp))
+        Box {
+            OutlinedButton(onClick = { languageExpanded = true }, modifier = Modifier.fillMaxWidth()) {
+                Text(when (vm.language) { "en" -> "English"; "zh" -> "简体中文"; else -> "Русский" })
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Default.ArrowDropDown, null)
+            }
+            DropdownMenu(expanded = languageExpanded, onDismissRequest = { languageExpanded = false }) {
+                DropdownMenuItem(text = { Text("Русский") }, onClick = { vm.updateLanguage("ru"); languageExpanded = false })
+                DropdownMenuItem(text = { Text("English") }, onClick = { vm.updateLanguage("en"); languageExpanded = false })
+                DropdownMenuItem(text = { Text("简体中文") }, onClick = { vm.updateLanguage("zh"); languageExpanded = false })
+            }
+        }
+        HorizontalDivider(Modifier.padding(vertical = 16.dp))
+
         Text(
-            "Расписание",
+            localized(vm.language, "Расписание", "Timetable", "课表"),
             style =
                 MaterialTheme.typography.titleMedium,
             fontWeight =
@@ -1967,7 +1999,7 @@ fun SettingsScreen(
         )
 
         Text(
-            "Полезное",
+            localized(vm.language, "Полезное", "Links", "相关链接"),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold
         )
@@ -1982,7 +2014,18 @@ fun SettingsScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
                     onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/")))
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/vvsut1metable")))
+                    },
+                    modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                ) {
+                    Icon(Icons.Default.Send, contentDescription = "Telegram-канал ВВГУ Timetable")
+                }
+                Text("Telegram", style = MaterialTheme.typography.labelSmall)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = {
+                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/"))
                     },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
@@ -2017,7 +2060,7 @@ fun SettingsScreen(
         Spacer(Modifier.height(12.dp))
 
         Text(
-            "VVSU timetable • версия ${BuildConfig.VERSION_NAME}",
+            "ВВГУ Timetable • версия ${BuildConfig.VERSION_NAME}",
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.fillMaxWidth().clickable {
                 versionTapCount++
@@ -2085,6 +2128,15 @@ fun SettingsScreen(
                     contentColor = MaterialTheme.colorScheme.primary
                 ),onClick = { vm.loadSchedule() }, modifier = Modifier.fillMaxWidth()) {
                             Text("Принудительно обновить расписание")
+                        }
+                        OutlinedButton(
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.primary
+                ),
+                            onClick = { showTestUpdateBanner = !showTestUpdateBanner },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(if (showTestUpdateBanner) "Скрыть тестовую плашку обновления" else "Показать тестовую плашку обновления")
                         }
                         OutlinedButton(
                 colors = ButtonDefaults.outlinedButtonColors(
