@@ -77,8 +77,8 @@ jobs:
             echo "# ВВГУ Timetable v${VERSION_NAME}"
             echo
             awk -v version="${VERSION_NAME}" '
-              $0 ~ "^## \\[" version "\\]" { printing=1; print; next }
-              printing && /^## \\[/ { exit }
+              index($0, "## [" version "]") == 1 { printing=1; print; next }
+              printing && index($0, "## [") == 1 { exit }
               printing { print }
             ' CHANGELOG.md
             echo
