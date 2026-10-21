@@ -54,7 +54,9 @@ jobs:
             -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
           VERSION_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
-          cp app/build/outputs/apk/release/app-release.apk VVSU_timetable.apk
+          APK_NAME="VVSU_timetable_v${VERSION_NAME}.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_OUTPUT"
           echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
           echo "Built signed VVSU Timetable version $VERSION_NAME"
 
@@ -62,32 +64,27 @@ jobs:
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           test -n "$APKSIGNER" || { echo "apksigner was not found"; exit 1; }
-          "$APKSIGNER" verify --verbose --print-certs VVSU_timetable.apk
-          sha256sum VVSU_timetable.apk
+          "$APKSIGNER" verify --verbose --print-certs "${{ steps.build_apk.outputs.apk_name }}"
+          sha256sum "${{ steps.build_apk.outputs.apk_name }}"
 
       - name: Generate release notes
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         env:
           VERSION_NAME: ${{ steps.build_apk.outputs.version_name }}
+          APK_NAME: ${{ steps.build_apk.outputs.apk_name }}
         run: |
-          PREVIOUS_TAG=$(git tag --list 'v*' --sort=-version:refname | grep -vx "v${VERSION_NAME}" | head -n 1 || true)
           {
-            echo "## Полный журнал изменений"
+            echo "# ВВГУ Timetable v${VERSION_NAME}"
             echo
-            if [ -n "$PREVIOUS_TAG" ]; then
-              echo "Изменения с релиза `$PREVIOUS_TAG`:"
-              echo
-              git log --no-merges --pretty=format:'- %s (`%h`)' "$PREVIOUS_TAG..HEAD"
-            else
-              echo "Изменения с начала истории проекта:"
-              echo
-              git log --no-merges --pretty=format:'- %s (`%h`)' HEAD
-            fi
-            echo
+            awk -v version="${VERSION_NAME}" '
+              $0 ~ "^## \\[" version "\\]" { printing=1; print; next }
+              printing && /^## \\[/ { exit }
+              printing { print }
+            ' CHANGELOG.md
             echo
             echo "---"
             echo
-            echo "APK: `VVSU_timetable.apk`"
+            echo "Файл приложения: \`${APK_NAME}\`"
           } > RELEASE_NOTES.md
 
       - name: Publish GitHub Release
@@ -98,7 +95,7 @@ jobs:
           name: ВВГУ Timetable v${{ steps.build_apk.outputs.version_name }}
           target_commitish: ${{ github.sha }}
           body_path: RELEASE_NOTES.md
-          files: VVSU_timetable.apk
+          files: ${{ steps.build_apk.outputs.apk_name }}
           overwrite_files: true
           make_latest: true
           fail_on_unmatched_files: true
@@ -106,7 +103,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: VVSU_timetable_v${{ github.run_number }}
-          path: VVSU_timetable.apk
+          name: VVSU_timetable_v${{ steps.build_apk.outputs.version_name }}
+          path: ${{ steps.build_apk.outputs.apk_name }}
           if-no-files-found: error
           retention-days: 14
