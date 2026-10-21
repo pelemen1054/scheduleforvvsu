@@ -49,19 +49,22 @@ jobs:
             -Pandroid.injected.signing.store.password="$ANDROID_KEYSTORE_PASSWORD" \
             -Pandroid.injected.signing.key.alias="$ANDROID_KEY_ALIAS" \
             -Pandroid.injected.signing.key.password="$ANDROID_KEY_PASSWORD"
-          cp app/build/outputs/apk/release/app-release.apk VVSU_timetable_signed_test.apk
+          VERSION_NAME=$(sed -n 's/.*versionName = "\([^"]*\)".*/\1/p' app/build.gradle.kts | head -n 1)
+          APK_NAME="VVSU_timetable_v${VERSION_NAME}_signed_test.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$APK_NAME"
+          echo "apk_name=$APK_NAME" >> "$GITHUB_ENV"
 
       - name: Verify APK signature
         run: |
           APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)
           test -n "$APKSIGNER" || { echo "apksigner was not found"; exit 1; }
-          "$APKSIGNER" verify --verbose --print-certs VVSU_timetable_signed_test.apk
+          "$APKSIGNER" verify --verbose --print-certs ${{ env.apk_name }}
           sha256sum VVSU_timetable_signed_test.apk
 
       - name: Upload test APK (no release published)
         uses: actions/upload-artifact@v4
         with:
-          name: VVSU_signed_test_apk
+          name: VVSU_timetable_v${{ env.apk_name }}
           path: VVSU_timetable_signed_test.apk
           if-no-files-found: error
           retention-days: 7
