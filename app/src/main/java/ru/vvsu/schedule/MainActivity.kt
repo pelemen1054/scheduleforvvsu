@@ -1678,7 +1678,16 @@ fun SettingsScreen(
         )
 
         var languageExpanded by remember { mutableStateOf(false) }
-        Text(localized(vm.language, "Язык приложения", "App language", "应用语言"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(localized(vm.language, "Язык приложения", "App language", "应用语言"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            Text(
+                "BETA",
+                modifier = Modifier.background(MaterialTheme.colorScheme.tertiaryContainer, CircleShape).padding(horizontal = 8.dp, vertical = 3.dp),
+                color = MaterialTheme.colorScheme.onTertiaryContainer,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.Bold
+            )
+        }
         Spacer(Modifier.height(8.dp))
         Box {
             OutlinedButton(onClick = { languageExpanded = true }, modifier = Modifier.fillMaxWidth()) {
