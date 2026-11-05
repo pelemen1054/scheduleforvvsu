@@ -25,6 +25,7 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         Context.MODE_PRIVATE
     )
     private val translators = mutableMapOf<String, Translator>()
+    private val downloadedLanguages = mutableSetOf<String>()
 
     private fun translatorFor(language: String): Translator {
         val targetLanguage = when (language) {
@@ -41,7 +42,11 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         }
     }
 
-    suspend fun translate(text: String, language: String): String {
+    suspend fun translate(
+        text: String,
+        language: String,
+        onModelDownloadStateChanged: (Boolean) -> Unit = {}
+    ): String {
         val source = text.trim()
         if (source.isBlank() || language == "ru") return text
 
@@ -49,14 +54,22 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         preferences.getString(key, null)?.let { return it }
 
         val translator = translatorFor(language)
-        suspendCancellableCoroutine<Unit> { continuation ->
-            translator.downloadModelIfNeeded(DownloadConditions.Builder().requireWifi().build())
-                .addOnSuccessListener {
-                    if (continuation.isActive) continuation.resume(Unit)
+        if (language !in downloadedLanguages) {
+            onModelDownloadStateChanged(true)
+            try {
+                suspendCancellableCoroutine<Unit> { continuation ->
+                    translator.downloadModelIfNeeded(DownloadConditions.Builder().requireWifi().build())
+                        .addOnSuccessListener {
+                            downloadedLanguages.add(language)
+                            if (continuation.isActive) continuation.resume(Unit)
+                        }
+                        .addOnFailureListener { error ->
+                            if (continuation.isActive) continuation.resumeWithException(error)
+                        }
                 }
-                .addOnFailureListener { error ->
-                    if (continuation.isActive) continuation.resumeWithException(error)
-                }
+            } finally {
+                onModelDownloadStateChanged(false)
+            }
         }
 
         val translated = suspendCancellableCoroutine<String> { continuation ->
