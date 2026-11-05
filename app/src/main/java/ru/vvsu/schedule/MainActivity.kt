@@ -1770,7 +1770,7 @@ fun SettingsScreen(
                     fontWeight = FontWeight.Medium
                 )
                 Text(
-                    localized(vm.language, "Переводить предметы, преподавателей и аудитории", "Translate subjects, teachers and rooms", "翻译课程、教师和教室"),
+                    localized(vm.language, "Переводит предметы, преподавателей и аудитории. Модель загружается по Wi-Fi (около 30 МБ).", "Translates subjects, teachers and rooms. The model downloads over Wi-Fi (about 30 MB).", "翻译课程、教师和教室。模型通过 Wi-Fi 下载（约 30 MB）。"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
