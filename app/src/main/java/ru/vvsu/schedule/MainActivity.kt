@@ -431,6 +431,26 @@ class MainViewModel : ViewModel() {
         error = "Кэш расписания очищен."
     }
 
+    fun exportArchive(context: Context, folderUri: Uri) {
+        archiveExportStatus = localized(language, "Подготовка архива…", "Preparing archive…", "正在准备存档…")
+        viewModelScope.launch {
+            try {
+                val count = withContext(Dispatchers.IO) {
+                    ScheduleArchiveExporter.export(context.applicationContext, folderUri)
+                }
+                archiveExportStatus = if (count == 0) {
+                    localized(language, "Пока нечего экспортировать. Архив появится после сохранения расписания избранной группы.", "Nothing to export yet. The archive will appear after a favorite group's timetable is saved.", "暂无可导出的内容。收藏班级的课表保存后会出现在这里。")
+                } else {
+                    localized(language, "Экспортировано архивов: $count. Созданы файлы JSON и HTML.", "Exported archives: $count. JSON and HTML files were created.", "已导出 $count 个存档，已创建 JSON 和 HTML 文件。")
+                }
+                AppLogger.info(context, "Экспорт архива расписаний завершён: файлов расписаний=$count")
+            } catch (exception: Exception) {
+                archiveExportStatus = localized(language, "Не удалось сохранить архив. Проверьте разрешение на выбранную папку.", "Could not save the archive. Check access to the selected folder.", "无法保存存档。请检查所选文件夹的访问权限。")
+                AppLogger.error(context, "Ошибка экспорта архива расписаний", exception)
+            }
+        }
+    }
+
     private fun scheduleNotifications() {
         val context = appContext ?: return
         NotificationScheduler.schedule(
