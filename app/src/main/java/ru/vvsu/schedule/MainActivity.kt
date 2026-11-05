@@ -91,6 +91,8 @@ class MainViewModel : ViewModel() {
     var language by mutableStateOf("ru")
     var fullScheduleTranslation by mutableStateOf(false)
     var modelDownloadInProgress by mutableStateOf(false)
+    var translationModelDownloaded by mutableStateOf(false)
+    var translationModelError by mutableStateOf<String?>(null)
 
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -146,6 +148,7 @@ class MainViewModel : ViewModel() {
             p.getString("theme_color", "blue") ?: "blue"
         language = p.getString("language", "ru") ?: "ru"
         fullScheduleTranslation = p.getBoolean("full_schedule_translation", false)
+        refreshTranslationModelStatus()
 
         favoriteGroups =
             p.getStringSet("favorite_groups", emptySet())
@@ -246,7 +249,55 @@ class MainViewModel : ViewModel() {
     fun updateLanguage(value: String) {
         language = value
         saveSettings()
+        translationModelError = null
+        refreshTranslationModelStatus()
         showLessons(allLessons.filter { it.date == date }.sortedBy { it.time })
+    }
+
+    fun refreshTranslationModelStatus() {
+        val targetLanguage = language
+        if (targetLanguage == "ru") {
+            translationModelDownloaded = true
+            modelDownloadInProgress = false
+            translationModelError = null
+            return
+        }
+        viewModelScope.launch {
+            try {
+                translationModelDownloaded =
+                    textTranslator?.isModelDownloaded(targetLanguage) == true
+            } catch (_: Exception) {
+                translationModelDownloaded = false
+            }
+        }
+    }
+
+    fun downloadTranslationModel() {
+        if (language == "ru" || modelDownloadInProgress) return
+        val targetLanguage = language
+        val translator = textTranslator ?: return
+        modelDownloadInProgress = true
+        translationModelError = null
+        viewModelScope.launch {
+            try {
+                translator.downloadModel(targetLanguage)
+                translationModelDownloaded = translator.isModelDownloaded(targetLanguage)
+                if (!translationModelDownloaded) {
+                    error("Model download did not complete")
+                }
+                translationModelError = null
+            } catch (exception: Exception) {
+                translationModelDownloaded = false
+                translationModelError = when {
+                    exception.message?.contains("wifi", ignoreCase = true) == true ->
+                        localized(targetLanguage, "Для загрузки подключитесь к Wi-Fi и повторите попытку.", "Connect to Wi-Fi and try again.", "请连接 Wi-Fi 后重试。")
+                    else ->
+                        localized(targetLanguage, "Не удалось загрузить модель. Проверьте интернет и попробуйте ещё раз.", "Could not download the model. Check your connection and try again.", "无法下载模型。请检查网络后重试。")
+                }
+            } finally {
+                modelDownloadInProgress = false
+            }
+        }
     }
 
     fun updateFullScheduleTranslation(value: Boolean) {
@@ -263,13 +314,22 @@ class MainViewModel : ViewModel() {
         val targetLanguage = language
         displayTranslationJob = viewModelScope.launch {
             try {
+                if (!translator.isModelDownloaded(targetLanguage)) {
+                    translationModelDownloaded = false
+                    cacheNotice = localized(
+                        targetLanguage,
+                        "Сначала скачайте языковую модель в настройках. Пока показан оригинальный текст.",
+                        "Download the language model in Settings first. The original text is shown for now.",
+                        "请先在设置中下载语言模型。目前显示原文。"
+                    )
+                    return@launch
+                }
+                translationModelDownloaded = true
                 val texts = source.flatMap { listOf(it.subject, it.teacher, it.type, it.room) }
                     .filter { it.isNotBlank() }
                     .distinct()
                 val translated = texts.associateWith {
-                    translator.translate(it, targetLanguage) { downloading ->
-                        modelDownloadInProgress = downloading
-                    }
+                    translator.translate(it, targetLanguage)
                 }
                 lessons = source.map { lesson ->
                     lesson.copy(
@@ -281,9 +341,12 @@ class MainViewModel : ViewModel() {
                 }
             } catch (_: Exception) {
                 lessons = source
-                cacheNotice = "Не удалось выполнить перевод. Показан оригинальный текст."
-            } finally {
-                modelDownloadInProgress = false
+                cacheNotice = localized(
+                    targetLanguage,
+                    "Не удалось выполнить перевод. Показан оригинальный текст.",
+                    "Translation failed. The original text is shown.",
+                    "翻译失败，当前显示原文。"
+                )
             }
         }
     }
@@ -1792,32 +1855,59 @@ fun SettingsScreen(
                 onCheckedChange = { vm.updateFullScheduleTranslation(it) }
             )
         }
-        if (vm.modelDownloadInProgress) {
+        if (vm.language != "ru") {
             Spacer(Modifier.height(10.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp
-                )
-                Column(modifier = Modifier.weight(1f)) {
+            when {
+                vm.modelDownloadInProgress -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            localized(vm.language, "Загрузка языковой модели…", "Downloading language model…", "正在下载语言模型…"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                vm.translationModelDownloaded -> {
                     Text(
-                        localized(vm.language, "Загрузка языковой модели…", "Downloading language model…", "正在下载语言模型…"),
+                        localized(vm.language, "Модель загружена. Всё готово!", "Model downloaded. You're all set!", "模型已下载，可以使用了！"),
+                        color = MaterialTheme.colorScheme.primary,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Medium
                     )
+                }
+                else -> {
+                    Button(
+                        onClick = { vm.downloadTranslationModel() },
+                        enabled = !vm.modelDownloadInProgress,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(localized(vm.language, "Скачать языковую модель", "Download language model", "下载语言模型"))
+                    }
                     Text(
-                        localized(vm.language, "Это может занять несколько минут. Требуется Wi-Fi.", "This may take a few minutes. Wi-Fi is required.", "这可能需要几分钟。需要连接 Wi-Fi。"),
+                        localized(vm.language, "Загрузка начнётся только после нажатия. Требуется Wi-Fi (около 30 МБ).", "The download starts only when you tap the button. Wi-Fi required (about 30 MB).", "仅在点击按钮后开始下载。需要 Wi-Fi（约 30 MB）。"),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            vm.translationModelError?.let { message ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
 
         HorizontalDivider(Modifier.padding(vertical = 16.dp))
