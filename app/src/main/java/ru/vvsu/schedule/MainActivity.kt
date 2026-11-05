@@ -854,6 +854,22 @@ fun App(
         mutableStateOf(false)
     }
 
+    val archiveFolderPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { folderUri ->
+        if (folderUri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    folderUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                vm.exportArchive(context, folderUri)
+            } catch (exception: Exception) {
+                AppLogger.error(context, "Не удалось получить доступ к папке архива", exception)
+            }
+        }
+    }
+
     val snackbarHostState =
         remember {
             SnackbarHostState()
