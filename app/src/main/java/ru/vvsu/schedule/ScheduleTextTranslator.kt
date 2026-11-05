@@ -50,7 +50,7 @@ class ScheduleTextTranslator(context: Context) : Closeable {
 
         val translator = translatorFor(language)
         suspendCancellableCoroutine<Unit> { continuation ->
-            translator.downloadModelIfNeeded()
+            translator.downloadModelIfNeeded(DownloadConditions.Builder().requireWifi().build())
                 .addOnSuccessListener {
                     if (continuation.isActive) continuation.resume(Unit)
                 }
