@@ -262,6 +262,8 @@ class MainViewModel : ViewModel() {
             translationModelError = null
             return
         }
+        translationModelDownloaded = false
+        translationModelError = null
         viewModelScope.launch {
             try {
                 translationModelDownloaded =
