@@ -1702,6 +1702,7 @@ fun SettingsScreen(
     var showTestUpdateBanner by remember { mutableStateOf(false) }
     var developerLogsVisible by remember { mutableStateOf(false) }
     var developerLogEntries by remember { mutableStateOf(emptyList<String>()) }
+    var selectedSettingsSection by remember { mutableStateOf<String?>(null) }
     
     Column(
         modifier
@@ -1712,7 +1713,36 @@ fun SettingsScreen(
             .padding(16.dp)
     ) {
 
-        if (vm.updateAvailable || showTestUpdateBanner) {
+        if (selectedSettingsSection == null) {
+            Text(localized(vm.language, "Настройки", "Settings", "设置"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(12.dp))
+            val sections = listOf(
+                Triple("appearance", "Оформление", "Appearance"),
+                Triple("language", "Язык", "Language"),
+                Triple("timetable", "Расписание", "Timetable"),
+                Triple("notifications", "Уведомления", "Notifications"),
+                Triple("archive", "Архив", "Archive")
+            )
+            sections.forEach { (key, russian, english) ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { selectedSettingsSection = key },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(localized(vm.language, russian, english, when (key) { "appearance" -> "外观"; "language" -> "语言"; "timetable" -> "课表"; "notifications" -> "通知"; else -> "存档" }), modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
+                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                    }
+                }
+            }
+        } else {
+            TextButton(onClick = { selectedSettingsSection = null }) {
+                Icon(Icons.Default.ArrowBack, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(localized(vm.language, "Назад к настройкам", "Back to settings", "返回设置"))
+            }
+        }
+
+        if (selectedSettingsSection == null && (vm.updateAvailable || showTestUpdateBanner)) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1758,6 +1788,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(16.dp))
         }
 
+        if (selectedSettingsSection == "appearance") {
         Text(
             localized(vm.language, "Оформление", "Appearance", "外观"),
             style =
@@ -1892,6 +1923,9 @@ fun SettingsScreen(
             )
         )
 
+        }
+
+        if (selectedSettingsSection == "language") {
         var languageExpanded by remember { mutableStateOf(false) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(localized(vm.language, "Язык приложения", "App language", "应用语言"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1994,6 +2028,9 @@ fun SettingsScreen(
 
         HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
+        }
+
+        if (selectedSettingsSection == "archive") {
         Text(
             localized(vm.language, "Архив расписаний", "Timetable archive", "课表存档"),
             style = MaterialTheme.typography.titleMedium,
@@ -2015,6 +2052,9 @@ fun SettingsScreen(
 
         HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
+        }
+
+        if (selectedSettingsSection == "timetable") {
         Text(
             localized(vm.language, "Расписание", "Timetable", "课表"),
             style =
@@ -2117,6 +2157,9 @@ fun SettingsScreen(
             Modifier.height(12.dp)
         )
 
+        }
+
+        if (selectedSettingsSection == "notifications") {
         var notificationDialogVisible by remember { mutableStateOf(false) }
 
         ListItem(
@@ -2270,6 +2313,9 @@ fun SettingsScreen(
             Modifier.padding(vertical = 16.dp)
         )
 
+        }
+
+        if (selectedSettingsSection == null) {
         Text(
             localized(vm.language, "Полезное", "Links", "相关链接"),
             style = MaterialTheme.typography.titleMedium,
@@ -2345,6 +2391,8 @@ fun SettingsScreen(
             },
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+
+        }
 
         if (passwordDialogVisible) {
             AlertDialog(
