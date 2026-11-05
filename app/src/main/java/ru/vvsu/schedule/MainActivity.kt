@@ -95,6 +95,7 @@ class MainViewModel : ViewModel() {
     var modelDownloadInProgress by mutableStateOf(false)
     var translationModelDownloaded by mutableStateOf(false)
     var translationModelError by mutableStateOf<String?>(null)
+    var archiveExportStatus by mutableStateOf<String?>(null)
 
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
