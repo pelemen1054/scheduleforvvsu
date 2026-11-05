@@ -81,8 +81,6 @@ class MainViewModel : ViewModel() {
     
     var darkTheme by mutableStateOf(false)
 
-    var autoRefresh by mutableStateOf(true)
-
     var notificationsEnabled by mutableStateOf(true)
 
     var notificationLeadMinutes by mutableStateOf(30)
@@ -132,9 +130,6 @@ class MainViewModel : ViewModel() {
         darkTheme =
             p.getBoolean("dark_theme", false)
 
-        autoRefresh =
-            p.getBoolean("auto_refresh", true)
-
         notificationsEnabled =
             p.getBoolean("notifications", true)
 
@@ -157,7 +152,7 @@ class MainViewModel : ViewModel() {
             lessons = cached
                 .filter { it.date == date }
                 .sortedBy { it.time }
-            cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+            cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
             scheduleNotifications()
         }
 
@@ -220,7 +215,6 @@ class MainViewModel : ViewModel() {
             ?.putString("selected_teacher", selectedTeacher)
             ?.putString("mode", mode)
             ?.putBoolean("dark_theme", darkTheme)
-            ?.putBoolean("auto_refresh", autoRefresh)
             ?.putBoolean(
                 "notifications",
                 notificationsEnabled
@@ -247,11 +241,6 @@ class MainViewModel : ViewModel() {
     fun updateLanguage(value: String) {
         language = value
         saveSettings()
-    }
-
-    fun updateAutoRefresh(value: Boolean) {
-    autoRefresh = value
-    saveSettings()
     }
 
     fun setNotifications(value: Boolean) {
@@ -327,6 +316,9 @@ class MainViewModel : ViewModel() {
             }
 
         saveSettings()
+        if (cleanGroup in favoriteGroups && mode == "group" && selectedGroup == cleanGroup) {
+            saveScheduleToCache(allLessons)
+        }
     }
 
     fun loadSuggestions(query: String) {
@@ -357,7 +349,7 @@ class MainViewModel : ViewModel() {
         suggestions = emptyList()
     }
 
-    private val cacheMaxAgeMs = 14L * 24L * 60L * 60L * 1000L
+    private val cacheRetentionDays = 30L
 
     private fun cacheFile(): File? {
         val context = appContext ?: return null
@@ -378,12 +370,17 @@ class MainViewModel : ViewModel() {
     }
 
     private fun saveScheduleToCache(result: List<Lesson>) {
-        if (result.isEmpty()) return
+        if (result.isEmpty() || mode != "group" || !favoriteGroups.contains(selectedGroup)) return
 
         val file = cacheFile() ?: return
+        val merged = (loadScheduleFromCache().orEmpty() + result)
+            .filter { !it.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays)) }
+            .associateBy { "${it.date}|${it.time}" }
+            .values
+            .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
         val array = JSONArray()
 
-        result.forEach { lesson ->
+        merged.forEach { lesson ->
             array.put(
                 JSONObject().apply {
                     put("date", lesson.date.toString())
@@ -411,30 +408,29 @@ class MainViewModel : ViewModel() {
         val file = cacheFile() ?: return null
         if (!file.exists()) return null
 
-        val age = System.currentTimeMillis() - file.lastModified()
-        if (age < 0L || age > cacheMaxAgeMs) {
-            file.delete()
-            return null
-        }
-
         return try {
             val array = JSONArray(file.readText(Charsets.UTF_8))
-            buildList {
+            val loaded = buildList {
                 for (i in 0 until array.length()) {
                     val item = array.getJSONObject(i)
-                    add(
-                        Lesson(
-                            date = LocalDate.parse(item.getString("date")),
-                            time = item.optString("time"),
-                            subject = item.optString("subject"),
-                            teacher = item.optString("teacher"),
-                            type = item.optString("type"),
-                            room = item.optString("room"),
-                            group = item.optString("group")
-                        )
+                    val lesson = Lesson(
+                        date = LocalDate.parse(item.getString("date")),
+                        time = item.optString("time"),
+                        subject = item.optString("subject"),
+                        teacher = item.optString("teacher"),
+                        type = item.optString("type"),
+                        room = item.optString("room"),
+                        group = item.optString("group")
                     )
+                    if (!lesson.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays))) {
+                        add(lesson)
+                    }
                 }
             }
+            if (loaded.size != array.length()) {
+                saveScheduleToCache(loaded)
+            }
+            loaded
         } catch (_: Exception) {
             null
         }
@@ -478,7 +474,9 @@ class MainViewModel : ViewModel() {
                     }
 
                 if (result.isNotEmpty()) {
-                    saveScheduleToCache(result)
+                    if (mode == "group" && favoriteGroups.contains(selectedGroup)) {
+                        saveScheduleToCache(result)
+                    }
                     allLessons = result
                     lessons = result
                         .filter { it.date == date }
@@ -493,7 +491,7 @@ class MainViewModel : ViewModel() {
                         lessons = cached
                             .filter { it.date == date }
                             .sortedBy { it.time }
-                        cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+                        cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
                         error = null
                         scheduleNotifications()
                     } else {
@@ -521,7 +519,7 @@ class MainViewModel : ViewModel() {
                         .filter { it.date == date }
                         .sortedBy { it.time }
 
-                    cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+                    cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
                     error = null
                     scheduleNotifications()
                 } else {
@@ -568,7 +566,7 @@ class MainViewModel : ViewModel() {
             lessons = cached
                 .filter { it.date == date }
                 .sortedBy { it.time }
-            cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+            cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
         }
 
         if (
@@ -1805,55 +1803,6 @@ fun SettingsScreen(
             Modifier.height(12.dp)
         )
 
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
-
-            Icon(
-                Icons.Default.Sync,
-                null
-            )
-
-            Spacer(
-                Modifier.width(16.dp)
-            )
-
-            Column(
-                Modifier.weight(1f)
-            ) {
-
-                Text(
-                    "Автообновление",
-                    fontWeight =
-                        FontWeight.Medium
-                )
-
-                Text(
-                    "Обновлять расписание автоматически"
-                )
-            }
-
-            Switch(
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
-                                        checkedBorderColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    checked =
-                    vm.autoRefresh,
-
-                onCheckedChange = {
-                    vm.updateAutoRefresh(it)
-                }
-            )
-        }
-
-        Spacer(
-            Modifier.height(12.dp)
-        )
-
         var notificationDialogVisible by remember { mutableStateOf(false) }
 
         ListItem(
@@ -2040,7 +1989,7 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Default.Language, contentDescription = "Официальный сайт ВВГУ")
                 }
-                Text("Сайт", style = MaterialTheme.typography.labelSmall)
+                Text("Сайт ВВГУ", style = MaterialTheme.typography.labelSmall)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
