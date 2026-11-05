@@ -104,6 +104,7 @@ class MainViewModel : ViewModel() {
     var suggestions by mutableStateOf<List<String>>(emptyList())
     var favoriteGroups by mutableStateOf<Set<String>>(emptySet())
     var cacheNotice by mutableStateOf<String?>(null)
+    var archiveNotice by mutableStateOf<String?>(null)
     var latestVersion by mutableStateOf<String?>(null)
     var latestReleaseUrl by mutableStateOf("https://github.com/pelemen1054/scheduleforvvsu/releases/latest")
     var updateAvailable by mutableStateOf(false)
@@ -167,7 +168,7 @@ class MainViewModel : ViewModel() {
         if (cached != null) {
             allLessons = cached
             showLessons(cached.filter { it.date == date }.sortedBy { it.time })
-            cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
+            archiveNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
             scheduleNotifications()
         }
 
@@ -648,6 +649,7 @@ class MainViewModel : ViewModel() {
         loading = true
         error = null
         cacheNotice = null
+        archiveNotice = null
 
         viewModelScope.launch {
 
@@ -676,7 +678,7 @@ class MainViewModel : ViewModel() {
                     }
                     allLessons = combined
                     showLessons(combined.filter { it.date == date }.sortedBy { it.time })
-                    cacheNotice = if (archived.isNotEmpty()) {
+                    archiveNotice = if (archived.isNotEmpty()) {
                         "Сохранённые занятия объединены с актуальным расписанием. Архив хранится 30 дней."
                     } else null
                     error = null
@@ -686,7 +688,7 @@ class MainViewModel : ViewModel() {
                     if (cached != null) {
                         allLessons = cached
                         showLessons(cached.filter { it.date == date }.sortedBy { it.time })
-                        cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
+                        archiveNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
                         error = null
                         scheduleNotifications()
                     } else {
@@ -712,7 +714,7 @@ class MainViewModel : ViewModel() {
                     allLessons = cached
                     showLessons(cached.filter { it.date == date }.sortedBy { it.time })
 
-                    cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
+                    archiveNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
                     error = null
                     scheduleNotifications()
                 } else {
@@ -750,12 +752,13 @@ class MainViewModel : ViewModel() {
         lessons = emptyList()
         error = null
         cacheNotice = null
+        archiveNotice = null
 
         val cached = loadScheduleFromCache()
         if (cached != null) {
             allLessons = cached
             showLessons(cached.filter { it.date == date }.sortedBy { it.time })
-            cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
+            archiveNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
         }
 
         if (
@@ -1287,17 +1290,6 @@ fun ScheduleScreen(
 
             HorizontalDivider()
 
-            if (vm.cacheNotice != null) {
-                Text(
-                    vm.cacheNotice ?: "",
-                    modifier = Modifier.padding(
-                        top = 8.dp,
-                        bottom = 4.dp
-                    ),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-
             when {
                 vm.error != null -> {
                     Box(
@@ -1714,8 +1706,7 @@ fun SettingsScreen(
     ) {
 
         if (selectedSettingsSection == null) {
-            Text(localized(vm.language, "Настройки", "Settings", "设置"), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(4.dp))
             val sections = listOf(
                 Triple("appearance", "Оформление", "Appearance"),
                 Triple("language", "Язык", "Language"),
@@ -1725,12 +1716,40 @@ fun SettingsScreen(
             )
             sections.forEach { (key, russian, english) ->
                 Card(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp).clickable { selectedSettingsSection = key },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable { selectedSettingsSection = key },
+                    shape = MaterialTheme.shapes.large,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
-                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(localized(vm.language, russian, english, when (key) { "appearance" -> "外观"; "language" -> "语言"; "timetable" -> "课表"; "notifications" -> "通知"; else -> "存档" }), modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
-                        Icon(Icons.Default.ChevronRight, contentDescription = null)
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(42.dp).background(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.shapes.medium),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                when (key) {
+                                    "appearance" -> Icons.Default.Palette
+                                    "language" -> Icons.Default.Language
+                                    "timetable" -> Icons.Default.DateRange
+                                    "notifications" -> Icons.Default.Notifications
+                                    else -> Icons.Default.Archive
+                                },
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Text(
+                            localized(vm.language, russian, english, when (key) { "appearance" -> "外观"; "language" -> "语言"; "timetable" -> "课表"; "notifications" -> "通知"; else -> "存档" }),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -2063,6 +2082,22 @@ fun SettingsScreen(
                 FontWeight.Bold
         )
 
+        vm.archiveNotice?.let { notice ->
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Spacer(Modifier.width(10.dp))
+                    Text(notice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            }
+        }
+
         ListItem(
 
             headlineContent = {
@@ -2160,159 +2195,121 @@ fun SettingsScreen(
         }
 
         if (selectedSettingsSection == "notifications") {
-        var notificationDialogVisible by remember { mutableStateOf(false) }
+            Text(
+                localized(vm.language, "Уведомления", "Notifications", "通知"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(Modifier.height(12.dp))
 
-        ListItem(
-            headlineContent = { Text(localized(vm.language, "Уведомления", "Notifications", "通知"), fontWeight = FontWeight.Medium) },
-            supportingContent = {
-                Text(if (vm.notificationsEnabled) "Настроить напоминания о занятиях" else "Отключены")
-            },
-            leadingContent = { Icon(Icons.Default.Notifications, null) },
-            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { notificationDialogVisible = true }
-        )
-
-        if (notificationDialogVisible) {
-            AlertDialog(
-                onDismissRequest = { notificationDialogVisible = false },
-                title = { Text(localized(vm.language, "Уведомления", "Notifications", "通知")) },
-                text = {
-                    Column {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(localized(vm.language, "Полное отключение", "Disable all", "全部关闭"))
-                                Text(localized(vm.language, "Не получать напоминания о парах", "Do not receive lesson reminders", "不接收课程提醒"), style = MaterialTheme.typography.bodySmall)
-                            }
-                            Switch(
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
-                                        checkedBorderColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    checked = !vm.notificationsEnabled,
-                                onCheckedChange = { vm.setNotifications(!it) }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                shape = MaterialTheme.shapes.large
+            ) {
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(localized(vm.language, "Напоминания о занятиях", "Lesson reminders", "课程提醒"), fontWeight = FontWeight.Medium)
+                            Text(
+                                if (vm.notificationsEnabled) localized(vm.language, "Уведомления включены", "Notifications are enabled", "通知已开启")
+                                else localized(vm.language, "Уведомления отключены", "Notifications are disabled", "通知已关闭"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Switch(
+                            checked = vm.notificationsEnabled,
+                            onCheckedChange = { vm.setNotifications(it) }
+                        )
+                    }
 
-                        Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
 
-                        var leadExpanded by remember { mutableStateOf(false) }
-                        Box(Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary
-                ),
-                                onClick = { leadExpanded = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                                    Text(localized(vm.language, "Время напоминания", "Reminder time", "提醒时间"))
-                                    Text(
-                                        "За " + when (vm.notificationLeadMinutes) {
-                                            60 -> "1 час"
-                                            90 -> "1 ч 30 мин"
-                                            120 -> "2 часа"
-                                            else -> vm.notificationLeadMinutes.toString() + " мин"
-                                        },
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                                Icon(Icons.Default.ArrowDropDown, null)
+                    var leadExpanded by remember { mutableStateOf(false) }
+                    Box(Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { leadExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                                Text(localized(vm.language, "Время напоминания", "Reminder time", "提醒时间"))
+                                Text(
+                                    localized(vm.language, "За ", " ", "提前 ") + when (vm.notificationLeadMinutes) {
+                                        60 -> localized(vm.language, "1 час", "1 hour", "1 小时")
+                                        90 -> localized(vm.language, "1 ч 30 мин", "1 hr 30 min", "1 小时 30 分钟")
+                                        120 -> localized(vm.language, "2 часа", "2 hours", "2 小时")
+                                        else -> vm.notificationLeadMinutes.toString() + localized(vm.language, " мин", " min", " 分钟")
+                                    },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
-                            DropdownMenu(
-                                expanded = leadExpanded,
-                                onDismissRequest = { leadExpanded = false }
-                            ) {
-                                listOf(
-                                    5 to "5 минут",
-                                    10 to "10 минут",
-                                    15 to "15 минут",
-                                    30 to "30 минут",
-                                    60 to "1 час",
-                                    90 to "1 час 30 минут",
-                                    120 to "2 часа"
-                                ).forEach { (minutes, title) ->
-                                    DropdownMenuItem(
-                                        text = { Text(title) },
-                                        onClick = {
-                                            vm.updateNotificationLeadMinutes(minutes)
-                                            leadExpanded = false
-                                        }
-                                    )
-                                }
+                            Icon(Icons.Default.ArrowDropDown, null)
+                        }
+                        DropdownMenu(expanded = leadExpanded, onDismissRequest = { leadExpanded = false }) {
+                            listOf(
+                                5 to "5 минут", 10 to "10 минут", 15 to "15 минут",
+                                30 to "30 минут", 60 to "1 час", 90 to "1 час 30 минут", 120 to "2 часа"
+                            ).forEach { (minutes, title) ->
+                                DropdownMenuItem(
+                                    text = { Text(title) },
+                                    onClick = {
+                                        vm.updateNotificationLeadMinutes(minutes)
+                                        leadExpanded = false
+                                    }
+                                )
                             }
                         }
+                    }
 
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            Spacer(Modifier.height(12.dp))
-                            OutlinedButton(
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary
-                ),
-                                onClick = {
-                                    val alarmManager = context.getSystemService(android.app.AlarmManager::class.java)
-                                    if (!alarmManager.canScheduleExactAlarms()) {
-                                        val settingsIntent = Intent(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val alarmManager = context.getSystemService(android.app.AlarmManager::class.java)
+                                if (!alarmManager.canScheduleExactAlarms()) {
+                                    context.startActivity(
+                                        Intent(
                                             Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                                             Uri.parse("package:" + context.packageName)
                                         )
-                                        context.startActivity(settingsIntent)
-                                    } else {
-                                        vm.refreshNotifications()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(localized(vm.language, "Разрешить точные уведомления", "Allow exact alarms", "允许精确提醒"))
-                            }
-                            Text(
-                                "Разрешение помогает Android показывать напоминания ближе к выбранному времени.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                                    )
+                                } else {
+                                    vm.refreshNotifications()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(localized(vm.language, "Уведомления между окнами", "Reminders between classes", "课间提醒"))
-                                Text(localized(vm.language, "Напоминать о паре после окна от 30 минут", "Remind me about a class after a break of 30 minutes or more", "课间间隔达到 30 分钟时提醒"), style = MaterialTheme.typography.bodySmall)
-                            }
-                            Switch(
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
-                                        checkedBorderColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    checked = vm.notifyAfterLongWindow,
-                                onCheckedChange = { vm.updateNotifyAfterLongWindow(it) }
+                            Text(localized(vm.language, "Разрешить точные уведомления", "Allow exact alarms", "允许精确提醒"))
+                        }
+                        Text(
+                            localized(vm.language, "Разрешение помогает Android показывать напоминания ближе к выбранному времени.", "This permission helps Android show reminders closer to the selected time.", "此权限有助于 Android 在设定时间附近显示提醒。"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(localized(vm.language, "Уведомления между окнами", "Reminders between classes", "课间提醒"))
+                            Text(
+                                localized(vm.language, "Напоминать о паре после окна от 30 минут", "Remind me about a class after a break of 30 minutes or more", "课间间隔达到 30 分钟时提醒"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    ),onClick = { notificationDialogVisible = false }) {
-                        Text(localized(vm.language, "Готово", "Done", "完成"))
+                        Switch(
+                            checked = vm.notifyAfterLongWindow,
+                            onCheckedChange = { vm.updateNotifyAfterLongWindow(it) }
+                        )
                     }
                 }
-            )
-        }
-
-        HorizontalDivider(
-            Modifier.padding(vertical = 16.dp)
-        )
-
+            }
+            Spacer(Modifier.height(16.dp))
         }
 
         if (selectedSettingsSection == null) {
