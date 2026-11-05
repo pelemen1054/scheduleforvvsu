@@ -90,6 +90,7 @@ class MainViewModel : ViewModel() {
     var themeColor by mutableStateOf("blue")
     var language by mutableStateOf("ru")
     var fullScheduleTranslation by mutableStateOf(false)
+    var modelDownloadInProgress by mutableStateOf(false)
 
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -265,7 +266,11 @@ class MainViewModel : ViewModel() {
                 val texts = source.flatMap { listOf(it.subject, it.teacher, it.type, it.room) }
                     .filter { it.isNotBlank() }
                     .distinct()
-                val translated = texts.associateWith { translator.translate(it, targetLanguage) }
+                val translated = texts.associateWith {
+                    translator.translate(it, targetLanguage) { downloading ->
+                        modelDownloadInProgress = downloading
+                    }
+                }
                 lessons = source.map { lesson ->
                     lesson.copy(
                         subject = translated[lesson.subject] ?: lesson.subject,
@@ -277,6 +282,8 @@ class MainViewModel : ViewModel() {
             } catch (_: Exception) {
                 lessons = source
                 cacheNotice = "Не удалось выполнить перевод. Показан оригинальный текст."
+            } finally {
+                modelDownloadInProgress = false
             }
         }
     }
@@ -1785,6 +1792,34 @@ fun SettingsScreen(
                 onCheckedChange = { vm.updateFullScheduleTranslation(it) }
             )
         }
+        if (vm.modelDownloadInProgress) {
+            Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        localized(vm.language, "Загрузка языковой модели…", "Downloading language model…", "正在下载语言模型…"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        localized(vm.language, "Это может занять несколько минут. Требуется Wi-Fi.", "This may take a few minutes. Wi-Fi is required.", "这可能需要几分钟。需要连接 Wi-Fi。"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
+
         HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
         Text(
