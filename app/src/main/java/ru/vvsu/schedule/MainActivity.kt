@@ -283,7 +283,7 @@ class MainViewModel : ViewModel() {
                 translator.downloadModel(targetLanguage)
                 translationModelDownloaded = translator.isModelDownloaded(targetLanguage)
                 if (!translationModelDownloaded) {
-                    error("Model download did not complete")
+                    throw IllegalStateException("Model download did not complete")
                 }
                 translationModelError = null
             } catch (exception: Exception) {
