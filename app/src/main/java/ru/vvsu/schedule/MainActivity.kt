@@ -1083,7 +1083,11 @@ fun App(
                         onSelectTeacher = {
                             vm.selectMode("teacher")
                             showSelector = true
-                        },                    )
+                        },
+                        onExportArchive = {
+                            archiveFolderPicker.launch(null)
+                        }
+                    )
                 }
             }
         }
@@ -1686,7 +1690,8 @@ fun SettingsScreen(
     vm: MainViewModel,
     modifier: Modifier,
     onSelectGroup: () -> Unit,
-    onSelectTeacher: () -> Unit
+    onSelectTeacher: () -> Unit,
+    onExportArchive: () -> Unit
 ) {
     val context = LocalContext.current
     var versionTapCount by remember { mutableIntStateOf(0) }
