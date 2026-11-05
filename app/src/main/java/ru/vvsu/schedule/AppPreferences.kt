@@ -24,9 +24,6 @@ class AppPreferences(
     private val darkThemeKey =
         booleanPreferencesKey("dark_theme")
 
-    private val autoRefreshKey =
-        booleanPreferencesKey("auto_refresh")
-
     private val notificationsKey =
         booleanPreferencesKey("notifications")
 
@@ -44,9 +41,6 @@ class AppPreferences(
                 darkTheme =
                     preferences[darkThemeKey] ?: false,
 
-                autoRefresh =
-                    preferences[autoRefreshKey] ?: true,
-
                 notifications =
                     preferences[notificationsKey] ?: true,
 
@@ -60,7 +54,6 @@ data class Settings(
     val group: String,
     val teacher: String,
     val darkTheme: Boolean,
-    val autoRefresh: Boolean,
     val notifications: Boolean,
     val color: String
 )
