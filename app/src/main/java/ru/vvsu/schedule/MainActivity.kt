@@ -286,6 +286,9 @@ class MainViewModel : ViewModel() {
                     throw IllegalStateException("Model download did not complete")
                 }
                 translationModelError = null
+                if (translationModelDownloaded && fullScheduleTranslation) {
+                    showLessons(allLessons.filter { it.date == date }.sortedBy { it.time })
+                }
             } catch (exception: Exception) {
                 translationModelDownloaded = false
                 translationModelError = when {
