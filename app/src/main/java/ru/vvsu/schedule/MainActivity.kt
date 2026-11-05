@@ -1432,7 +1432,7 @@ fun SelectorScreen(
                 Modifier.fillMaxWidth()
         ) {
 
-            Text("Выбрать")
+            Text(localized(vm.language, "Выбрать", "Select", "选择"))
         }
 
         if (vm.mode == "group" && vm.favoriteGroups.isNotEmpty()) {
@@ -1460,7 +1460,7 @@ fun SelectorScreen(
                         leadingContent = {
                             Icon(
                                 Icons.Default.Star,
-                                contentDescription = "Избранная группа"
+                                contentDescription = localized(vm.language, "Избранная группа", "Favorite group", "收藏的班级")
                             )
                         },
                         trailingContent = {
@@ -1471,7 +1471,7 @@ fun SelectorScreen(
                             ) {
                                 Icon(
                                     Icons.Default.Star,
-                                    contentDescription = "Убрать из избранного"
+                                    contentDescription = localized(vm.language, "Убрать из избранного", "Remove from favorites", "取消收藏")
                                 )
                             }
                         },
@@ -1798,7 +1798,7 @@ fun SettingsScreen(
         ListItem(
 
             headlineContent = {
-                Text("Группа")
+                Text(localized(vm.language, "Группа", "Group", "班级"))
             },
 
             supportingContent = {
@@ -1839,13 +1839,13 @@ fun SettingsScreen(
             modifier =
                 Modifier.fillMaxWidth()
         ) {
-            Text("Изменить группу")
+            Text(localized(vm.language, "Изменить группу", "Change group", "更改班级"))
         }
 
         ListItem(
 
             headlineContent = {
-                Text("Преподаватель")
+                Text(localized(vm.language, "Преподаватель", "Teacher", "教师"))
             },
 
             supportingContent = {
@@ -1882,7 +1882,7 @@ fun SettingsScreen(
             modifier =
                 Modifier.fillMaxWidth()
         ) {
-            Text("Изменить преподавателя")
+            Text(localized(vm.language, "Изменить преподавателя", "Change teacher", "更改教师"))
         }
 
         Spacer(
@@ -1892,7 +1892,7 @@ fun SettingsScreen(
         var notificationDialogVisible by remember { mutableStateOf(false) }
 
         ListItem(
-            headlineContent = { Text("Уведомления", fontWeight = FontWeight.Medium) },
+            headlineContent = { Text(localized(vm.language, "Уведомления", "Notifications", "通知"), fontWeight = FontWeight.Medium) },
             supportingContent = {
                 Text(if (vm.notificationsEnabled) "Настроить напоминания о занятиях" else "Отключены")
             },
@@ -1906,7 +1906,7 @@ fun SettingsScreen(
         if (notificationDialogVisible) {
             AlertDialog(
                 onDismissRequest = { notificationDialogVisible = false },
-                title = { Text("Уведомления") },
+                title = { Text(localized(vm.language, "Уведомления", "Notifications", "通知")) },
                 text = {
                     Column {
                         Row(
@@ -1914,8 +1914,8 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Полное отключение")
-                                Text("Не получать напоминания о парах", style = MaterialTheme.typography.bodySmall)
+                                Text(localized(vm.language, "Полное отключение", "Disable all", "全部关闭"))
+                                Text(localized(vm.language, "Не получать напоминания о парах", "Do not receive lesson reminders", "不接收课程提醒"), style = MaterialTheme.typography.bodySmall)
                             }
                             Switch(
                                     colors = SwitchDefaults.colors(
@@ -1940,7 +1940,7 @@ fun SettingsScreen(
                                 modifier = Modifier.fillMaxWidth()
                             ) {
                                 Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                                    Text("Время напоминания")
+                                    Text(localized(vm.language, "Время напоминания", "Reminder time", "提醒时间"))
                                     Text(
                                         "За " + when (vm.notificationLeadMinutes) {
                                             60 -> "1 час"
@@ -1997,7 +1997,7 @@ fun SettingsScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Text("Разрешить точные уведомления")
+                                Text(localized(vm.language, "Разрешить точные уведомления", "Allow exact alarms", "允许精确提醒"))
                             }
                             Text(
                                 "Разрешение помогает Android показывать напоминания ближе к выбранному времени.",
@@ -2012,8 +2012,8 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(Modifier.weight(1f)) {
-                                Text("Уведомления между окнами")
-                                Text("Напоминать о паре после окна от 30 минут", style = MaterialTheme.typography.bodySmall)
+                                Text(localized(vm.language, "Уведомления между окнами", "Reminders between classes", "课间提醒"))
+                                Text(localized(vm.language, "Напоминать о паре после окна от 30 минут", "Remind me about a class after a break of 30 minutes or more", "课间间隔达到 30 分钟时提醒"), style = MaterialTheme.typography.bodySmall)
                             }
                             Switch(
                                     colors = SwitchDefaults.colors(
@@ -2032,7 +2032,7 @@ fun SettingsScreen(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = { notificationDialogVisible = false }) {
-                        Text("Готово")
+                        Text(localized(vm.language, "Готово", "Done", "完成"))
                     }
                 }
             )
@@ -2062,7 +2062,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Telegram-канал ВВГУ Timetable")
+                    Icon(Icons.Default.Send, contentDescription = "VVSU Timetable Telegram channel")
                 }
                 Text("Telegram", style = MaterialTheme.typography.labelSmall)
             }
@@ -2073,9 +2073,9 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Language, contentDescription = "Официальный сайт ВВГУ")
+                    Icon(Icons.Default.Language, contentDescription = localized(vm.language, "Официальный сайт ВВГУ", "Official VVSU website", "ВВГУ 官方网站"))
                 }
-                Text("Сайт ВВГУ", style = MaterialTheme.typography.labelSmall)
+                Text(localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"), style = MaterialTheme.typography.labelSmall)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
@@ -2084,7 +2084,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Code, contentDescription = "GitHub проекта")
+                    Icon(Icons.Default.Code, contentDescription = "Project GitHub")
                 }
                 Text("GitHub", style = MaterialTheme.typography.labelSmall)
             }
@@ -2097,7 +2097,7 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Default.Send, contentDescription = "Поддержка в Telegram")
                 }
-                Text("Поддержка", style = MaterialTheme.typography.labelSmall)
+                Text(localized(vm.language, "Поддержка", "Support", "支持"), style = MaterialTheme.typography.labelSmall)
             }
         }
 
@@ -2121,19 +2121,19 @@ fun SettingsScreen(
         if (passwordDialogVisible) {
             AlertDialog(
                 onDismissRequest = { passwordDialogVisible = false },
-                title = { Text("Режим разработчика") },
+                title = { Text(localized(vm.language, "Режим разработчика", "Developer mode", "开发者模式")) },
                 text = {
                     Column {
-                        Text("Введите пароль для доступа.")
+                        Text(localized(vm.language, "Введите пароль для доступа.", "Enter the access password.", "请输入访问密码。"))
                         Spacer(Modifier.height(8.dp))
                         OutlinedTextField(
                             value = developerPassword,
                             onValueChange = { developerPassword = it; passwordError = false },
-                            label = { Text("Пароль") },
+                            label = { Text(localized(vm.language, "Пароль", "Password", "密码")) },
                             singleLine = true,
                             isError = passwordError
                         )
-                        if (passwordError) Text("Неверный пароль", color = MaterialTheme.colorScheme.error)
+                        if (passwordError) Text(localized(vm.language, "Неверный пароль", "Incorrect password", "密码错误"), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 confirmButton = {
@@ -2146,13 +2146,13 @@ fun SettingsScreen(
                             developerPassword = ""
                             developerModeVisible = true
                         } else passwordError = true
-                    }) { Text("Войти") }
+                    }) { Text(localized(vm.language, "Войти", "Sign in", "登录")) }
                 },
                 dismissButton = {
                     TextButton(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
-                    ),onClick = { passwordDialogVisible = false }) { Text("Отмена") }
+                    ),onClick = { passwordDialogVisible = false }) { Text(localized(vm.language, "Отмена", "Cancel", "取消")) }
                 }
             )
         }
@@ -2160,7 +2160,7 @@ fun SettingsScreen(
         if (developerModeVisible) {
             AlertDialog(
                 onDismissRequest = { developerModeVisible = false },
-                title = { Text("Инструменты разработчика") },
+                title = { Text(localized(vm.language, "Инструменты разработчика", "Developer tools", "开发者工具")) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Версия: ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})")
@@ -2171,7 +2171,7 @@ fun SettingsScreen(
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.primary
                 ),onClick = { vm.loadSchedule() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Принудительно обновить расписание")
+                            Text(localized(vm.language, "Принудительно обновить расписание", "Force refresh timetable", "强制刷新课表"))
                         }
                         OutlinedButton(
                 colors = ButtonDefaults.outlinedButtonColors(
@@ -2189,13 +2189,13 @@ fun SettingsScreen(
                             onClick = { NotificationScheduler.showTestNotification(context) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Принудительно вызвать уведомление")
+                            Text(localized(vm.language, "Принудительно вызвать уведомление", "Trigger a test notification", "触发测试通知"))
                         }
                         OutlinedButton(
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.primary
                 ),onClick = { vm.clearScheduleCache() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Очистить локальный кэш")
+                            Text(localized(vm.language, "Очистить локальный кэш", "Clear local cache", "清除本地缓存"))
                         }
                     }
                 },
@@ -2203,7 +2203,7 @@ fun SettingsScreen(
                     TextButton(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
-                    ),onClick = { developerModeVisible = false }) { Text("Закрыть") }
+                    ),onClick = { developerModeVisible = false }) { Text(localized(vm.language, "Закрыть", "Close", "关闭")) }
                 }
             )
         }
