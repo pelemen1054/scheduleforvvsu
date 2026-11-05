@@ -29,6 +29,7 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         Context.MODE_PRIVATE
     )
     private val translators = mutableMapOf<String, Translator>()
+    private val verifiedModels = mutableSetOf<String>()
     private val modelManager = RemoteModelManager.getInstance()
 
     private fun targetLanguage(language: String): String = when (language) {
@@ -59,10 +60,13 @@ class ScheduleTextTranslator(context: Context) : Closeable {
                 return false
             }
 
+            if (language in verifiedModels) return true
+
             // RemoteModelManager may report "downloaded" while Translator cannot
-            // access the model files. A tiny real translation checks the usable path.
+            // access the model files. A tiny real translation checks the usable path once.
             try {
                 translatorFor(language).translate("Проверка").awaitResult()
+                verifiedModels.add(language)
                 AppLogger.info(appContext, "Модель $language найдена и успешно прошла тестовый перевод")
                 true
             } catch (verificationError: Exception) {
@@ -101,6 +105,7 @@ class ScheduleTextTranslator(context: Context) : Closeable {
             if (managerSaysDownloaded) {
                 try {
                     translatorFor(language).translate("Проверка").awaitResult()
+                    verifiedModels.add(language)
                     AppLogger.info(appContext, "Модель $language уже установлена и прошла проверку")
                     return
                 } catch (verificationError: Exception) {
@@ -113,6 +118,7 @@ class ScheduleTextTranslator(context: Context) : Closeable {
             translatorFor(language).downloadModelIfNeeded(conditions).awaitResult()
             AppLogger.info(appContext, "Загрузка ML Kit завершена. Проверяем реальный перевод.")
             translatorFor(language).translate("Проверка").awaitResult()
+            verifiedModels.add(language)
             AppLogger.info(appContext, "Модель $language загружена и прошла тестовый перевод")
         } catch (exception: Exception) {
             AppLogger.error(appContext, "Загрузка модели через Translator завершилась ошибкой: $language", exception)
@@ -125,6 +131,7 @@ class ScheduleTextTranslator(context: Context) : Closeable {
             "Unsupported translation language: $language"
         }
         translators.remove(language)?.close()
+        verifiedModels.remove(language)
         AppLogger.info(appContext, "Удаление локальной модели перевода: $language")
         modelManager.deleteDownloadedModel(modelFor(language)).awaitResult()
         AppLogger.info(appContext, "Локальная модель перевода удалена: $language")
@@ -204,6 +211,7 @@ class ScheduleTextTranslator(context: Context) : Closeable {
     override fun close() {
         translators.values.forEach { it.close() }
         translators.clear()
+        verifiedModels.clear()
     }
 }
 
