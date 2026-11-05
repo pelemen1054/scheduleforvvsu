@@ -1995,6 +1995,27 @@ fun SettingsScreen(
         HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
         Text(
+            localized(vm.language, "Архив расписаний", "Timetable archive", "课表存档"),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            localized(vm.language, "Экспортируйте архив избранных групп в выбранную папку. HTML удобно открывать, JSON подходит для резервного копирования.", "Export favorite-group archives to a folder you choose. HTML is easy to view; JSON is suitable for backup.", "将收藏班级的存档导出到所选文件夹。HTML 便于查看，JSON 适合备份。"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(onClick = onExportArchive, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.FolderOpen, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(localized(vm.language, "Выбрать папку и экспортировать", "Choose folder and export", "选择文件夹并导出"))
+        }
+        vm.archiveExportStatus?.let { status ->
+            Text(status, style = MaterialTheme.typography.bodySmall)
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 16.dp))
+
+        Text(
             localized(vm.language, "Расписание", "Timetable", "课表"),
             style =
                 MaterialTheme.typography.titleMedium,
