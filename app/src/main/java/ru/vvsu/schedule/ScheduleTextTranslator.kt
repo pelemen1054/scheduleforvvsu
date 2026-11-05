@@ -51,7 +51,15 @@ class ScheduleTextTranslator(context: Context) : Closeable {
 
     suspend fun isModelDownloaded(language: String): Boolean {
         if (language == "ru") return true
-        return modelManager.isModelDownloaded(modelFor(language)).awaitResult()
+        AppLogger.info(appContext, "Проверка наличия модели перевода: $language")
+        return try {
+            modelManager.isModelDownloaded(modelFor(language)).awaitResult().also { downloaded ->
+                AppLogger.info(appContext, "Статус модели $language: ${if (downloaded) "загружена" else "не загружена"}")
+            }
+        } catch (exception: Exception) {
+            AppLogger.error(appContext, "Ошибка проверки модели перевода: $language", exception)
+            throw exception
+        }
     }
 
     /**
@@ -79,9 +87,14 @@ class ScheduleTextTranslator(context: Context) : Closeable {
             "Translation model for $language has not been downloaded"
         }
 
-        val translated = translatorFor(language).translate(source).awaitResult()
-        preferences.edit().putString(key, translated).apply()
-        return translated
+        return try {
+            val translated = translatorFor(language).translate(source).awaitResult()
+            preferences.edit().putString(key, translated).apply()
+            translated
+        } catch (exception: Exception) {
+            AppLogger.error(appContext, "ML Kit не смог перевести элемент (язык=$language, длина текста=${source.length})", exception)
+            throw exception
+        }
     }
 
     private suspend fun <T> Task<T>.awaitResult(): T =
