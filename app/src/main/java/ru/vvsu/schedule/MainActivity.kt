@@ -5,6 +5,8 @@ package ru.vvsu.schedule
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -110,11 +112,16 @@ class MainViewModel : ViewModel() {
     private var textTranslator: ScheduleTextTranslator? = null
     private val repository = VvsuRepository()
 
+    fun developerLogEntries(): List<String> = appContext?.let { AppLogger.read(it) }.orEmpty()
+
+    fun clearDeveloperLogs() { appContext?.let { AppLogger.clear(it) } }
+
     fun init(context: Context) {
 
         if (preferences != null) return
 
         appContext = context.applicationContext
+        AppLogger.info(context, "Приложение инициализировано")
         textTranslator = ScheduleTextTranslator(context)
         checkForUpdates()
 
@@ -268,8 +275,9 @@ class MainViewModel : ViewModel() {
             try {
                 translationModelDownloaded =
                     textTranslator?.isModelDownloaded(targetLanguage) == true
-            } catch (_: Exception) {
+            } catch (exception: Exception) {
                 translationModelDownloaded = false
+                appContext?.let { AppLogger.error(it, "Проверка языковой модели ($targetLanguage) завершилась ошибкой", exception) }
             }
         }
     }
@@ -280,6 +288,7 @@ class MainViewModel : ViewModel() {
         val translator = textTranslator ?: return
         modelDownloadInProgress = true
         translationModelError = null
+        appContext?.let { AppLogger.info(it, "Начата загрузка языковой модели: $targetLanguage") }
         viewModelScope.launch {
             try {
                 translator.downloadModel(targetLanguage)
@@ -288,11 +297,13 @@ class MainViewModel : ViewModel() {
                     throw IllegalStateException("Model download did not complete")
                 }
                 translationModelError = null
+                appContext?.let { AppLogger.info(it, "Языковая модель успешно загружена: $targetLanguage") }
                 if (translationModelDownloaded && fullScheduleTranslation) {
                     showLessons(allLessons.filter { it.date == date }.sortedBy { it.time })
                 }
             } catch (exception: Exception) {
                 translationModelDownloaded = false
+                appContext?.let { AppLogger.error(it, "Не удалось загрузить языковую модель: $targetLanguage", exception) }
                 translationModelError = when {
                     exception.message?.contains("wifi", ignoreCase = true) == true ->
                         localized(targetLanguage, "Для загрузки подключитесь к Wi-Fi и повторите попытку.", "Connect to Wi-Fi and try again.", "请连接 Wi-Fi 后重试。")
@@ -317,9 +328,11 @@ class MainViewModel : ViewModel() {
         if (!fullScheduleTranslation || language == "ru" || source.isEmpty()) return
         val translator = textTranslator ?: return
         val targetLanguage = language
+        AppLogger.info(appContext, "Начат перевод расписания: язык=$targetLanguage, занятий=${source.size}")
         displayTranslationJob = viewModelScope.launch {
             try {
                 if (!translator.isModelDownloaded(targetLanguage)) {
+                    AppLogger.warning(appContext, "Перевод отменён: языковая модель $targetLanguage не найдена")
                     translationModelDownloaded = false
                     cacheNotice = localized(
                         targetLanguage,
@@ -333,6 +346,7 @@ class MainViewModel : ViewModel() {
                 val texts = source.flatMap { listOf(it.subject, it.teacher, it.type, it.room) }
                     .filter { it.isNotBlank() }
                     .distinct()
+                AppLogger.info(appContext, "Модель доступна. Уникальных элементов для перевода: ${texts.size}")
                 val translated = texts.associateWith {
                     translator.translate(it, targetLanguage)
                 }
@@ -344,7 +358,9 @@ class MainViewModel : ViewModel() {
                         room = translated[lesson.room] ?: lesson.room
                     )
                 }
-            } catch (_: Exception) {
+                AppLogger.info(appContext, "Перевод расписания успешно завершён: $targetLanguage")
+            } catch (exception: Exception) {
+                AppLogger.error(appContext, "Ошибка перевода расписания: $targetLanguage", exception)
                 lessons = source
                 cacheNotice = localized(
                     targetLanguage,
@@ -1625,6 +1641,8 @@ fun SettingsScreen(
     var developerPassword by remember { mutableStateOf("") }
     var passwordError by remember { mutableStateOf(false) }
     var showTestUpdateBanner by remember { mutableStateOf(false) }
+    var developerLogsVisible by remember { mutableStateOf(false) }
+    var developerLogEntries by remember { mutableStateOf(emptyList<String>()) }
     
     Column(
         modifier
@@ -2298,6 +2316,14 @@ fun SettingsScreen(
                         Text("Выбрано: " + if (vm.mode == "group") vm.selectedGroup.ifBlank { "нет" } else vm.selectedTeacher.ifBlank { "нет" })
                         Text("Занятий на выбранную дату: " + vm.lessons.size)
                         OutlinedButton(
+                            onClick = {
+                                developerLogEntries = vm.developerLogEntries()
+                                developerModeVisible = false
+                                developerLogsVisible = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Открыть журнал событий (${vm.developerLogEntries().size})") }
+                        OutlinedButton(
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.primary
                 ),onClick = { vm.loadSchedule() }, modifier = Modifier.fillMaxWidth()) {
@@ -2334,6 +2360,35 @@ fun SettingsScreen(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = { developerModeVisible = false }) { Text(localized(vm.language, "Закрыть", "Close", "关闭")) }
+                }
+            )
+        }
+
+        if (developerLogsVisible) {
+            AlertDialog(
+                onDismissRequest = { developerLogsVisible = false; developerModeVisible = true },
+                title = { Text("Журнал событий") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Последние ${developerLogEntries.size} записей. Тексты расписания не сохраняются.")
+                        if (developerLogEntries.isEmpty()) Text("Записей пока нет.")
+                        else Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            developerLogEntries.forEach { entry ->
+                                Text(entry, style = MaterialTheme.typography.bodySmall)
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("VVSU Timetable logs", developerLogEntries.joinToString("\n")))
+                        }) { Text("Копировать") }
+                        TextButton(onClick = { vm.clearDeveloperLogs(); developerLogEntries = emptyList() }) { Text("Очистить") }
+                        TextButton(onClick = { developerLogsVisible = false; developerModeVisible = true }) { Text("Назад") }
+                    }
                 }
             )
         }
