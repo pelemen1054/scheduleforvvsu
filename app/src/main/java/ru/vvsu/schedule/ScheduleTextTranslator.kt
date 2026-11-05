@@ -1,21 +1,25 @@
 package ru.vvsu.schedule
 
 import android.content.Context
+import com.google.android.gms.tasks.Task
 import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.common.model.RemoteModelManager
 import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.TranslateRemoteModel
 import com.google.mlkit.nl.translate.Translation
 import com.google.mlkit.nl.translate.Translator
 import com.google.mlkit.nl.translate.TranslatorOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.Closeable
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
 /**
  * On-device Russian -> English/Chinese translation.
- * Translation results are cached locally so repeated timetable loads do not
- * translate the same text again.
+ * Models are downloaded only after an explicit user action.
+ * Translation results are cached locally.
  */
 class ScheduleTextTranslator(context: Context) : Closeable {
 
@@ -25,66 +29,83 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         Context.MODE_PRIVATE
     )
     private val translators = mutableMapOf<String, Translator>()
-    private val downloadedLanguages = mutableSetOf<String>()
+    private val modelManager = RemoteModelManager.getInstance()
 
-    private fun translatorFor(language: String): Translator {
-        val targetLanguage = when (language) {
-            "en" -> TranslateLanguage.ENGLISH
-            "zh" -> TranslateLanguage.CHINESE
-            else -> return error("Unsupported translation language: $language")
-        }
-        return translators.getOrPut(language) {
+    private fun targetLanguage(language: String): String = when (language) {
+        "en" -> TranslateLanguage.ENGLISH
+        "zh" -> TranslateLanguage.CHINESE
+        else -> error("Unsupported translation language: $language")
+    }
+
+    private fun modelFor(language: String): TranslateRemoteModel =
+        TranslateRemoteModel.Builder(targetLanguage(language)).build()
+
+    private fun translatorFor(language: String): Translator =
+        translators.getOrPut(language) {
             val options = TranslatorOptions.Builder()
                 .setSourceLanguage(TranslateLanguage.RUSSIAN)
-                .setTargetLanguage(targetLanguage)
+                .setTargetLanguage(targetLanguage(language))
                 .build()
             Translation.getClient(options)
         }
+
+    suspend fun isModelDownloaded(language: String): Boolean {
+        if (language == "ru") return true
+        return modelManager.isModelDownloaded(modelFor(language)).awaitResult()
     }
 
-    suspend fun translate(
-        text: String,
-        language: String,
-        onModelDownloadStateChanged: (Boolean) -> Unit = {}
-    ): String {
+    /**
+     * Called only from the Settings download button.
+     * Wi-Fi is required to avoid unexpected mobile-data usage.
+     */
+    suspend fun downloadModel(language: String) {
+        require(language == "en" || language == "zh") {
+            "Unsupported translation language: $language"
+        }
+        val conditions = DownloadConditions.Builder()
+            .requireWifi()
+            .build()
+        modelManager.download(modelFor(language), conditions).awaitResult()
+    }
+
+    suspend fun translate(text: String, language: String): String {
         val source = text.trim()
         if (source.isBlank() || language == "ru") return text
 
         val key = cacheKey(language, source)
         preferences.getString(key, null)?.let { return it }
 
-        val translator = translatorFor(language)
-        if (language !in downloadedLanguages) {
-            onModelDownloadStateChanged(true)
-            try {
-                suspendCancellableCoroutine<Unit> { continuation ->
-                    translator.downloadModelIfNeeded(DownloadConditions.Builder().requireWifi().build())
-                        .addOnSuccessListener {
-                            downloadedLanguages.add(language)
-                            if (continuation.isActive) continuation.resume(Unit)
-                        }
-                        .addOnFailureListener { error ->
-                            if (continuation.isActive) continuation.resumeWithException(error)
-                        }
-                }
-            } finally {
-                onModelDownloadStateChanged(false)
-            }
+        check(isModelDownloaded(language)) {
+            "Translation model for $language has not been downloaded"
         }
 
-        val translated = suspendCancellableCoroutine<String> { continuation ->
-            translator.translate(source)
-                .addOnSuccessListener { result ->
-                    if (continuation.isActive) continuation.resume(result)
-                }
-                .addOnFailureListener { error ->
-                    if (continuation.isActive) continuation.resumeWithException(error)
-                }
-        }
-
+        val translated = translatorFor(language).translate(source).awaitResult()
         preferences.edit().putString(key, translated).apply()
         return translated
     }
+
+    private suspend fun <T> Task<T>.awaitResult(): T =
+        suspendCancellableCoroutine { continuation ->
+            val completed = AtomicBoolean(false)
+            continuation.invokeOnCancellation {
+                completed.set(true)
+            }
+            addOnSuccessListener { result ->
+                if (completed.compareAndSet(false, true)) {
+                    continuation.resume(result)
+                }
+            }
+            addOnFailureListener { error ->
+                if (completed.compareAndSet(false, true)) {
+                    continuation.resumeWithException(error)
+                }
+            }
+            addOnCanceledListener {
+                if (completed.compareAndSet(false, true)) {
+                    continuation.cancel()
+                }
+            }
+        }
 
     private fun cacheKey(language: String, text: String): String {
         val digest = MessageDigest.getInstance("SHA-256")
