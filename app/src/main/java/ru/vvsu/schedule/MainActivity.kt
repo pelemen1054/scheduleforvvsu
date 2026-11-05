@@ -369,18 +369,9 @@ class MainViewModel : ViewModel() {
         return File(directory, "${mode}_$hash.json")
     }
 
-    private fun saveScheduleToCache(result: List<Lesson>) {
-        if (result.isEmpty() || mode != "group" || !favoriteGroups.contains(selectedGroup)) return
-
-        val file = cacheFile() ?: return
-        val merged = (loadScheduleFromCache().orEmpty() + result)
-            .filter { !it.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays)) }
-            .associateBy { "${it.date}|${it.time}" }
-            .values
-            .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
+    private fun writeScheduleCache(file: File, lessons: List<Lesson>) {
         val array = JSONArray()
-
-        merged.forEach { lesson ->
+        lessons.forEach { lesson ->
             array.put(
                 JSONObject().apply {
                     put("date", lesson.date.toString())
@@ -393,15 +384,25 @@ class MainViewModel : ViewModel() {
                 }
             )
         }
-
         try {
             val temporary = File(file.parentFile, "${file.name}.tmp")
             temporary.writeText(array.toString(), Charsets.UTF_8)
             if (file.exists()) file.delete()
             temporary.renameTo(file)
         } catch (_: Exception) {
-            // Кэш не должен ломать отображение расписания.
+            // Ошибка архива не должна ломать отображение расписания.
         }
+    }
+
+    private fun saveScheduleToCache(result: List<Lesson>) {
+        if (result.isEmpty() || mode != "group" || !favoriteGroups.contains(selectedGroup)) return
+        val file = cacheFile() ?: return
+        val merged = (loadScheduleFromCache().orEmpty() + result)
+            .filter { !it.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays)) }
+            .associateBy { "${it.date}|${it.time}" }
+            .values
+            .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
+        writeScheduleCache(file, merged)
     }
 
     private fun loadScheduleFromCache(): List<Lesson>? {
@@ -428,7 +429,7 @@ class MainViewModel : ViewModel() {
                 }
             }
             if (loaded.size != array.length()) {
-                saveScheduleToCache(loaded)
+                writeScheduleCache(file, loaded)
             }
             loaded
         } catch (_: Exception) {
