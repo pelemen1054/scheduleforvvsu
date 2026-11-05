@@ -76,6 +76,16 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         modelManager.download(modelFor(language), conditions).awaitResult()
     }
 
+    suspend fun deleteModel(language: String) {
+        require(language == "en" || language == "zh") {
+            "Unsupported translation language: $language"
+        }
+        translators.remove(language)?.close()
+        AppLogger.info(appContext, "Удаление локальной модели перевода: $language")
+        modelManager.deleteDownloadedModel(modelFor(language)).awaitResult()
+        AppLogger.info(appContext, "Локальная модель перевода удалена: $language")
+    }
+
     suspend fun translate(text: String, language: String): String {
         val source = text.trim()
         if (source.isBlank() || language == "ru") return text
@@ -93,8 +103,28 @@ class ScheduleTextTranslator(context: Context) : Closeable {
             translated
         } catch (exception: Exception) {
             AppLogger.error(appContext, "ML Kit не смог перевести элемент (язык=$language, длина текста=${source.length})", exception)
+            if (isModelFilesMissing(exception)) {
+                AppLogger.warning(appContext, "Обнаружены отсутствующие файлы модели $language. Запускается удаление неисправной модели.")
+                try {
+                    deleteModel(language)
+                } catch (deleteException: Exception) {
+                    AppLogger.error(appContext, "Не удалось удалить неисправную модель $language", deleteException)
+                }
+                throw TranslationModelFilesMissingException(language, exception)
+            }
             throw exception
         }
+    }
+
+    private fun isModelFilesMissing(error: Throwable): Boolean {
+        var current: Throwable? = error
+        while (current != null) {
+            if (current.message?.contains("Translation model files not found", ignoreCase = true) == true) {
+                return true
+            }
+            current = current.cause
+        }
+        return false
     }
 
     private suspend fun <T> Task<T>.awaitResult(): T =
@@ -132,3 +162,8 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         translators.clear()
     }
 }
+
+class TranslationModelFilesMissingException(
+    val language: String,
+    cause: Throwable
+) : Exception("Translation model files are missing for $language", cause)
