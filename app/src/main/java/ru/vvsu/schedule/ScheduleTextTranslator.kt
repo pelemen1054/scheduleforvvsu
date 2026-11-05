@@ -73,7 +73,16 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         val conditions = DownloadConditions.Builder()
             .requireWifi()
             .build()
-        modelManager.download(modelFor(language), conditions).awaitResult()
+        AppLogger.info(appContext, "Запуск загрузки модели через Translator.downloadModelIfNeeded: $language")
+        try {
+            // Use the same Translator instance that will later perform translations.
+            // ML Kit checks/downloads the actual files required by this translator.
+            translatorFor(language).downloadModelIfNeeded(conditions).awaitResult()
+            AppLogger.info(appContext, "Translator подтвердил готовность модели: $language")
+        } catch (exception: Exception) {
+            AppLogger.error(appContext, "Загрузка модели через Translator завершилась ошибкой: $language", exception)
+            throw exception
+        }
     }
 
     suspend fun deleteModel(language: String) {
