@@ -360,8 +360,19 @@ class MainViewModel : ViewModel() {
             }
 
         saveSettings()
-        if (cleanGroup in favoriteGroups && mode == "group" && selectedGroup == cleanGroup) {
-            saveScheduleToCache(allLessons)
+        if (cleanGroup in favoriteGroups) {
+            if (mode == "group" && selectedGroup == cleanGroup && allLessons.isNotEmpty()) {
+                saveGroupScheduleToCache(cleanGroup, allLessons)
+            } else {
+                viewModelScope.launch {
+                    try {
+                        val result = repository.loadGroup(cleanGroup)
+                        saveGroupScheduleToCache(cleanGroup, result)
+                    } catch (_: Exception) {
+                        // Расписание будет сохранено при следующем успешном обновлении.
+                    }
+                }
+            }
         }
     }
 
@@ -395,9 +406,9 @@ class MainViewModel : ViewModel() {
 
     private val cacheRetentionDays = 30L
 
-    private fun cacheFile(): File? {
+    private fun cacheFile(groupOverride: String? = null): File? {
         val context = appContext ?: return null
-        val source = if (mode == "group") selectedGroup else selectedTeacher
+        val source = groupOverride ?: if (mode == "group") selectedGroup else selectedTeacher
         if (source.isBlank()) return null
 
         val hash = MessageDigest
@@ -410,7 +421,8 @@ class MainViewModel : ViewModel() {
             directory.mkdirs()
         }
 
-        return File(directory, "${mode}_$hash.json")
+        val cacheMode = if (groupOverride != null) "group" else mode
+        return File(directory, "${cacheMode}_$hash.json")
     }
 
     private fun writeScheduleCache(file: File, lessons: List<Lesson>) {
@@ -439,9 +451,14 @@ class MainViewModel : ViewModel() {
     }
 
     private fun saveScheduleToCache(result: List<Lesson>) {
-        if (result.isEmpty() || mode != "group" || !favoriteGroups.contains(selectedGroup)) return
-        val file = cacheFile() ?: return
-        val merged = (loadScheduleFromCache().orEmpty() + result)
+        if (mode != "group") return
+        saveGroupScheduleToCache(selectedGroup, result)
+    }
+
+    private fun saveGroupScheduleToCache(group: String, result: List<Lesson>) {
+        if (result.isEmpty() || group !in favoriteGroups) return
+        val file = cacheFile(group) ?: return
+        val merged = (loadScheduleFromCache(group).orEmpty() + result)
             .filter { !it.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays)) }
             .associateBy { "${it.date}|${it.time}" }
             .values
@@ -449,8 +466,8 @@ class MainViewModel : ViewModel() {
         writeScheduleCache(file, merged)
     }
 
-    private fun loadScheduleFromCache(): List<Lesson>? {
-        val file = cacheFile() ?: return null
+    private fun loadScheduleFromCache(groupOverride: String? = null): List<Lesson>? {
+        val file = cacheFile(groupOverride) ?: return null
         if (!file.exists()) return null
 
         return try {
