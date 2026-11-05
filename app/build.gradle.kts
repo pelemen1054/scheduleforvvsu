@@ -46,6 +46,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.9.3")
     implementation("androidx.datastore:datastore-preferences:1.1.7")
     implementation("org.jsoup:jsoup:1.21.1")
+    implementation("com.google.mlkit:translate:17.0.3")
     implementation("androidx.browser:browser:1.9.0")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
