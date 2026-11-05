@@ -362,12 +362,29 @@ class MainViewModel : ViewModel() {
             } catch (exception: Exception) {
                 AppLogger.error(appContext, "Ошибка перевода расписания: $targetLanguage", exception)
                 lessons = source
-                cacheNotice = localized(
-                    targetLanguage,
-                    "Не удалось выполнить перевод. Показан оригинальный текст.",
-                    "Translation failed. The original text is shown.",
-                    "翻译失败，当前显示原文。"
-                )
+                if (exception is TranslationModelFilesMissingException) {
+                    translationModelDownloaded = false
+                    translationModelError = localized(
+                        targetLanguage,
+                        "Файлы модели отсутствуют. Откройте настройки и нажмите «Скачать языковую модель», чтобы загрузить её заново по Wi-Fi.",
+                        "The model files are missing. Open Settings and tap “Download language model” to download it again over Wi-Fi.",
+                        "模型文件缺失。请打开设置并点击“下载语言模型”，通过 Wi-Fi 重新下载。"
+                    )
+                    AppLogger.warning(appContext, "Статус модели $targetLanguage сброшен. Ожидается ручная повторная загрузка пользователем.")
+                    cacheNotice = localized(
+                        targetLanguage,
+                        "Модель перевода восстановлена до состояния «не загружена». Исходный текст показан. Перейдите в настройки и скачайте модель заново.",
+                        "The translation model was reset to “not downloaded”. Original text is shown. Open Settings and download the model again.",
+                        "翻译模型状态已重置为“未下载”。当前显示原文。请打开设置重新下载模型。"
+                    )
+                } else {
+                    cacheNotice = localized(
+                        targetLanguage,
+                        "Не удалось выполнить перевод. Показан оригинальный текст.",
+                        "Translation failed. The original text is shown.",
+                        "翻译失败，当前显示原文。"
+                    )
+                }
             }
         }
     }
