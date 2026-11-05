@@ -51,10 +51,29 @@ class ScheduleTextTranslator(context: Context) : Closeable {
 
     suspend fun isModelDownloaded(language: String): Boolean {
         if (language == "ru") return true
-        AppLogger.info(appContext, "Проверка наличия модели перевода: $language")
+        AppLogger.info(appContext, "Проверка наличия и работоспособности модели перевода: $language")
         return try {
-            modelManager.isModelDownloaded(modelFor(language)).awaitResult().also { downloaded ->
-                AppLogger.info(appContext, "Статус модели $language: ${if (downloaded) "загружена" else "не загружена"}")
+            val downloaded = modelManager.isModelDownloaded(modelFor(language)).awaitResult()
+            if (!downloaded) {
+                AppLogger.info(appContext, "Менеджер ML Kit сообщает: модель $language не загружена")
+                return false
+            }
+
+            // RemoteModelManager may report "downloaded" while Translator cannot
+            // access the model files. A tiny real translation checks the usable path.
+            try {
+                translatorFor(language).translate("Проверка").awaitResult()
+                AppLogger.info(appContext, "Модель $language найдена и успешно прошла тестовый перевод")
+                true
+            } catch (verificationError: Exception) {
+                if (isModelFilesMissing(verificationError)) {
+                    AppLogger.warning(appContext, "ML Kit видит модель $language, но файлы недоступны. Сбрасываем ошибочный статус.")
+                    deleteModel(language)
+                    false
+                } else {
+                    AppLogger.error(appContext, "Не удалось проверить работоспособность модели $language", verificationError)
+                    throw verificationError
+                }
             }
         } catch (exception: Exception) {
             AppLogger.error(appContext, "Ошибка проверки модели перевода: $language", exception)
@@ -77,8 +96,24 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         try {
             // Use the same Translator instance that will later perform translations.
             // ML Kit checks/downloads the actual files required by this translator.
+            // Clear a stale "downloaded" flag if ML Kit's model files are missing.
+            val managerSaysDownloaded = modelManager.isModelDownloaded(modelFor(language)).awaitResult()
+            if (managerSaysDownloaded) {
+                try {
+                    translatorFor(language).translate("Проверка").awaitResult()
+                    AppLogger.info(appContext, "Модель $language уже установлена и прошла проверку")
+                    return
+                } catch (verificationError: Exception) {
+                    if (!isModelFilesMissing(verificationError)) throw verificationError
+                    AppLogger.warning(appContext, "Обнаружена неполная модель $language. Удаляем перед повторной загрузкой.")
+                    deleteModel(language)
+                }
+            }
+
             translatorFor(language).downloadModelIfNeeded(conditions).awaitResult()
-            AppLogger.info(appContext, "Translator подтвердил готовность модели: $language")
+            AppLogger.info(appContext, "Загрузка ML Kit завершена. Проверяем реальный перевод.")
+            translatorFor(language).translate("Проверка").awaitResult()
+            AppLogger.info(appContext, "Модель $language загружена и прошла тестовый перевод")
         } catch (exception: Exception) {
             AppLogger.error(appContext, "Загрузка модели через Translator завершилась ошибкой: $language", exception)
             throw exception
