@@ -801,15 +801,15 @@ fun App(
 
                                 showSelector ->
                                     if (vm.mode == "group")
-                                        "Выбор группы"
+                                        localized(vm.language, "Выбор группы", "Select group", "选择班级")
                                     else
-                                        "Выбор преподавателя"
+                                        localized(vm.language, "Выбор преподавателя", "Select teacher", "选择教师")
 
                                 tab == 0 ->
-                                    "Timetable"
+                                    localized(vm.language, "Расписание", "Timetable", "课表")
 
                                 else ->
-                                    "Настройки"
+                                    localized(vm.language, "Настройки", "Settings", "设置")
                             }
                         )
                     },
@@ -829,7 +829,7 @@ fun App(
 
                                 Icon(
                                     Icons.Default.ArrowBack,
-                                    contentDescription = "Назад"
+                                    contentDescription = localized(vm.language, "Назад", "Back", "返回")
                                 )
                             }
                         }
@@ -850,7 +850,7 @@ fun App(
 
                                 Icon(
                                     Icons.Default.Refresh,
-                                    contentDescription = "Обновить"
+                                    contentDescription = localized(vm.language, "Обновить", "Refresh", "刷新")
                                 )
                             }
                         }
@@ -878,7 +878,7 @@ fun App(
                                 )
                             },
                             label = {
-                                Text("Расписание")
+                                Text(localized(vm.language, "Расписание", "Timetable", "课表"))
                             }
                         )
 
@@ -894,7 +894,7 @@ fun App(
                                 )
                             },
                             label = {
-                                Text("Настройки")
+                                Text(localized(vm.language, "Настройки", "Settings", "设置"))
                             }
                         )
                     }
@@ -978,7 +978,7 @@ fun ScheduleScreen(
                         showDatePicker = false
                     }
                 ) {
-                    Text("Выбрать")
+                    Text(localized(vm.language, "Выбрать", "Select", "选择"))
                 }
             },
             dismissButton = {
@@ -986,7 +986,7 @@ fun ScheduleScreen(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = { showDatePicker = false }) {
-                    Text("Отмена")
+                    Text(localized(vm.language, "Отмена", "Cancel", "取消"))
                 }
             }
         ) {
@@ -1022,7 +1022,7 @@ fun ScheduleScreen(
                         vm.selectMode("group")
                     },
                     label = {
-                        Text("👥 Группа")
+                        Text(localized(vm.language, "👥 Группа", "👥 Group", "👥 班级"))
                     }
                 )
 
@@ -1032,7 +1032,7 @@ fun ScheduleScreen(
                         vm.selectMode("teacher")
                     },
                     label = {
-                        Text("👨‍🏫 Преподаватель")
+                        Text(localized(vm.language, "👨‍🏫 Преподаватель", "👨‍🏫 Teacher", "👨‍🏫 教师"))
                     }
                 )
             }
@@ -1054,20 +1054,20 @@ fun ScheduleScreen(
                     ) {
                         Text(
                             if (vm.mode == "group")
-                                "Группа"
+                                localized(vm.language, "Группа", "Group", "班级")
                             else
-                                "Преподаватель",
+                                localized(vm.language, "Преподаватель", "Teacher", "教师"),
                             style = MaterialTheme.typography.labelMedium
                         )
 
                         Text(
                             if (vm.mode == "group") {
                                 vm.selectedGroup.ifBlank {
-                                    "Не выбрана"
+                                    localized(vm.language, "Не выбрана", "Not selected", "未选择")
                                 }
                             } else {
                                 vm.selectedTeacher.ifBlank {
-                                    "Не выбран"
+                                    localized(vm.language, "Не выбран", "Not selected", "未选择")
                                 }
                             },
                             style = MaterialTheme.typography.titleMedium,
@@ -1098,7 +1098,7 @@ fun ScheduleScreen(
                 ) {
                     Icon(
                         Icons.Default.ChevronLeft,
-                        "Предыдущий день"
+                        localized(vm.language, "Предыдущий день", "Previous day", "前一天")
                     )
                 }
 
@@ -1114,7 +1114,11 @@ fun ScheduleScreen(
                         vm.date.format(
                             DateTimeFormatter.ofPattern(
                                 "d MMMM, EEEE",
-                                Locale("ru")
+                                when (vm.language) {
+                                    "en" -> Locale.ENGLISH
+                                    "zh" -> Locale.SIMPLIFIED_CHINESE
+                                    else -> Locale("ru")
+                                }
                             )
                         )
                     )
@@ -1127,7 +1131,7 @@ fun ScheduleScreen(
                 ) {
                     Icon(
                         Icons.Default.ChevronRight,
-                        "Следующий день"
+                        localized(vm.language, "Следующий день", "Next day", "后一天")
                     )
                 }
             }
@@ -1179,9 +1183,9 @@ fun ScheduleScreen(
                                 (vm.mode == "teacher" &&
                                     vm.selectedTeacher.isBlank())
                             ) {
-                                "Выберите группу или преподавателя"
+                                localized(vm.language, "Выберите группу или преподавателя", "Select a group or teacher", "请选择班级或教师")
                             } else {
-                                "На этот день занятий нет"
+                                localized(vm.language, "На этот день занятий нет", "No classes on this day", "这一天没有课程")
                             }
                         )
                     }
@@ -1193,7 +1197,7 @@ fun ScheduleScreen(
                         contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
                         items(vm.lessons) {
-                            LessonCard(it)
+                            LessonCard(it, vm.language)
                         }
                     }
                 }
@@ -1204,7 +1208,8 @@ fun ScheduleScreen(
 
 @Composable
 fun LessonCard(
-    lesson: Lesson
+    lesson: Lesson,
+    language: String
 ) {
     var expanded by remember(lesson) { mutableStateOf(false) }
 
@@ -1255,7 +1260,7 @@ fun LessonCard(
                 if (lesson.room.isNotBlank()) Text("🏫 ${lesson.room}")
                 if (lesson.group.isNotBlank()) Text("👥 ${lesson.group}")
                 Text(
-                    "Нажмите, чтобы свернуть",
+                    localized(language, "Нажмите, чтобы свернуть", "Tap to collapse", "点击收起"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp)
