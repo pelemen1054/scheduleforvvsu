@@ -89,6 +89,7 @@ class MainViewModel : ViewModel() {
 
     var themeColor by mutableStateOf("blue")
     var language by mutableStateOf("ru")
+    var fullScheduleTranslation by mutableStateOf(false)
 
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -102,6 +103,8 @@ class MainViewModel : ViewModel() {
     var updateAvailable by mutableStateOf(false)
 
     private var suggestionsJob: Job? = null
+    private var displayTranslationJob: Job? = null
+    private var textTranslator: ScheduleTextTranslator? = null
     private val repository = VvsuRepository()
 
     fun init(context: Context) {
@@ -109,6 +112,7 @@ class MainViewModel : ViewModel() {
         if (preferences != null) return
 
         appContext = context.applicationContext
+        textTranslator = ScheduleTextTranslator(context)
         checkForUpdates()
 
         preferences = context.getSharedPreferences(
@@ -140,6 +144,7 @@ class MainViewModel : ViewModel() {
         themeColor =
             p.getString("theme_color", "blue") ?: "blue"
         language = p.getString("language", "ru") ?: "ru"
+        fullScheduleTranslation = p.getBoolean("full_schedule_translation", false)
 
         favoriteGroups =
             p.getStringSet("favorite_groups", emptySet())
@@ -149,9 +154,7 @@ class MainViewModel : ViewModel() {
         val cached = loadScheduleFromCache()
         if (cached != null) {
             allLessons = cached
-            lessons = cached
-                .filter { it.date == date }
-                .sortedBy { it.time }
+            showLessons(cached.filter { it.date == date }.sortedBy { it.time })
             cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
             scheduleNotifications()
         }
@@ -224,6 +227,7 @@ class MainViewModel : ViewModel() {
             ?.putBoolean("notify_after_long_window", notifyAfterLongWindow)
             ?.putString("theme_color", themeColor)
             ?.putString("language", language)
+            ?.putBoolean("full_schedule_translation", fullScheduleTranslation)
             ?.putStringSet("favorite_groups", favoriteGroups)
             ?.apply()
     }
@@ -241,6 +245,46 @@ class MainViewModel : ViewModel() {
     fun updateLanguage(value: String) {
         language = value
         saveSettings()
+        showLessons(allLessons.filter { it.date == date }.sortedBy { it.time })
+    }
+
+    fun updateFullScheduleTranslation(value: Boolean) {
+        fullScheduleTranslation = value
+        saveSettings()
+        showLessons(allLessons.filter { it.date == date }.sortedBy { it.time })
+    }
+
+    private fun showLessons(source: List<Lesson>) {
+        displayTranslationJob?.cancel()
+        lessons = source
+        if (!fullScheduleTranslation || language == "ru" || source.isEmpty()) return
+        val translator = textTranslator ?: return
+        val targetLanguage = language
+        displayTranslationJob = viewModelScope.launch {
+            try {
+                val texts = source.flatMap { listOf(it.subject, it.teacher, it.type, it.room) }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                val translated = texts.associateWith { translator.translate(it, targetLanguage) }
+                lessons = source.map { lesson ->
+                    lesson.copy(
+                        subject = translated[lesson.subject] ?: lesson.subject,
+                        teacher = translated[lesson.teacher] ?: lesson.teacher,
+                        type = translated[lesson.type] ?: lesson.type,
+                        room = translated[lesson.room] ?: lesson.room
+                    )
+                }
+            } catch (_: Exception) {
+                lessons = source
+                cacheNotice = "Не удалось выполнить перевод. Показан оригинальный текст."
+            }
+        }
+    }
+
+    override fun onCleared() {
+        displayTranslationJob?.cancel()
+        textTranslator?.close()
+        super.onCleared()
     }
 
     fun setNotifications(value: Boolean) {
@@ -485,9 +529,7 @@ class MainViewModel : ViewModel() {
                         saveScheduleToCache(result)
                     }
                     allLessons = combined
-                    lessons = combined
-                        .filter { it.date == date }
-                        .sortedBy { it.time }
+                    showLessons(combined.filter { it.date == date }.sortedBy { it.time })
                     cacheNotice = if (archived.isNotEmpty()) {
                         "Сохранённые занятия объединены с актуальным расписанием. Архив хранится 30 дней."
                     } else null
@@ -497,9 +539,7 @@ class MainViewModel : ViewModel() {
                     val cached = loadScheduleFromCache()
                     if (cached != null) {
                         allLessons = cached
-                        lessons = cached
-                            .filter { it.date == date }
-                            .sortedBy { it.time }
+                        showLessons(cached.filter { it.date == date }.sortedBy { it.time })
                         cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
                         error = null
                         scheduleNotifications()
@@ -524,9 +564,7 @@ class MainViewModel : ViewModel() {
 
                 if (cached != null) {
                     allLessons = cached
-                    lessons = cached
-                        .filter { it.date == date }
-                        .sortedBy { it.time }
+                    showLessons(cached.filter { it.date == date }.sortedBy { it.time })
 
                     cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
                     error = null
@@ -554,9 +592,7 @@ class MainViewModel : ViewModel() {
     fun changeDate(newDate: LocalDate) {
         date = newDate
         error = null
-        lessons = allLessons
-            .filter { it.date == newDate }
-            .sortedBy { it.time }
+        showLessons(allLessons.filter { it.date == newDate }.sortedBy { it.time })
     }
 
     fun selectMode(newMode: String) {
@@ -572,9 +608,7 @@ class MainViewModel : ViewModel() {
         val cached = loadScheduleFromCache()
         if (cached != null) {
             allLessons = cached
-            lessons = cached
-                .filter { it.date == date }
-                .sortedBy { it.time }
+            showLessons(cached.filter { it.date == date }.sortedBy { it.time })
             cacheNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
         }
 
@@ -1707,6 +1741,27 @@ fun SettingsScreen(
                 DropdownMenuItem(text = { Text("English") }, onClick = { vm.updateLanguage("en"); languageExpanded = false })
                 DropdownMenuItem(text = { Text("简体中文") }, onClick = { vm.updateLanguage("zh"); languageExpanded = false })
             }
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    localized(vm.language, "Полный перевод расписания", "Translate the entire timetable", "完整翻译课表"),
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    localized(vm.language, "Переводить предметы, преподавателей и аудитории", "Translate subjects, teachers and rooms", "翻译课程、教师和教室"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = vm.fullScheduleTranslation,
+                onCheckedChange = { vm.updateFullScheduleTranslation(it) }
+            )
         }
         HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
