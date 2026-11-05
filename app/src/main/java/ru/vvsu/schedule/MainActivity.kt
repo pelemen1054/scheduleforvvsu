@@ -475,14 +475,22 @@ class MainViewModel : ViewModel() {
                     }
 
                 if (result.isNotEmpty()) {
+                    val archived = loadScheduleFromCache().orEmpty()
+                    val combined = (archived + result)
+                        .filter { !it.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays)) }
+                        .associateBy { "${it.date}|${it.time}" }
+                        .values
+                        .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
                     if (mode == "group" && favoriteGroups.contains(selectedGroup)) {
                         saveScheduleToCache(result)
                     }
-                    allLessons = result
-                    lessons = result
+                    allLessons = combined
+                    lessons = combined
                         .filter { it.date == date }
                         .sortedBy { it.time }
-                    cacheNotice = null
+                    cacheNotice = if (archived.isNotEmpty()) {
+                        "Сохранённые занятия объединены с актуальным расписанием. Архив хранится 30 дней."
+                    } else null
                     error = null
                     scheduleNotifications()
                 } else {
