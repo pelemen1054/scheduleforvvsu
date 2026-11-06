@@ -5,6 +5,8 @@ package ru.vvsu.schedule
 import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -81,8 +83,6 @@ class MainViewModel : ViewModel() {
     
     var darkTheme by mutableStateOf(false)
 
-    var autoRefresh by mutableStateOf(true)
-
     var notificationsEnabled by mutableStateOf(true)
 
     var notificationLeadMinutes by mutableStateOf(30)
@@ -91,6 +91,11 @@ class MainViewModel : ViewModel() {
 
     var themeColor by mutableStateOf("blue")
     var language by mutableStateOf("ru")
+    var fullScheduleTranslation by mutableStateOf(false)
+    var modelDownloadInProgress by mutableStateOf(false)
+    var translationModelDownloaded by mutableStateOf(false)
+    var translationModelError by mutableStateOf<String?>(null)
+    var archiveExportStatus by mutableStateOf<String?>(null)
 
     var loading by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
@@ -99,18 +104,27 @@ class MainViewModel : ViewModel() {
     var suggestions by mutableStateOf<List<String>>(emptyList())
     var favoriteGroups by mutableStateOf<Set<String>>(emptySet())
     var cacheNotice by mutableStateOf<String?>(null)
+    var archiveNotice by mutableStateOf<String?>(null)
     var latestVersion by mutableStateOf<String?>(null)
     var latestReleaseUrl by mutableStateOf("https://github.com/pelemen1054/scheduleforvvsu/releases/latest")
     var updateAvailable by mutableStateOf(false)
 
     private var suggestionsJob: Job? = null
+    private var displayTranslationJob: Job? = null
+    private var textTranslator: ScheduleTextTranslator? = null
     private val repository = VvsuRepository()
+
+    fun developerLogEntries(): List<String> = appContext?.let { AppLogger.read(it) }.orEmpty()
+
+    fun clearDeveloperLogs() { appContext?.let { AppLogger.clear(it) } }
 
     fun init(context: Context) {
 
         if (preferences != null) return
 
         appContext = context.applicationContext
+        AppLogger.info(context, "Приложение инициализировано")
+        textTranslator = ScheduleTextTranslator(context)
         checkForUpdates()
 
         preferences = context.getSharedPreferences(
@@ -132,9 +146,6 @@ class MainViewModel : ViewModel() {
         darkTheme =
             p.getBoolean("dark_theme", false)
 
-        autoRefresh =
-            p.getBoolean("auto_refresh", true)
-
         notificationsEnabled =
             p.getBoolean("notifications", true)
 
@@ -145,6 +156,8 @@ class MainViewModel : ViewModel() {
         themeColor =
             p.getString("theme_color", "blue") ?: "blue"
         language = p.getString("language", "ru") ?: "ru"
+        fullScheduleTranslation = p.getBoolean("full_schedule_translation", false)
+        refreshTranslationModelStatus()
 
         favoriteGroups =
             p.getStringSet("favorite_groups", emptySet())
@@ -154,10 +167,8 @@ class MainViewModel : ViewModel() {
         val cached = loadScheduleFromCache()
         if (cached != null) {
             allLessons = cached
-            lessons = cached
-                .filter { it.date == date }
-                .sortedBy { it.time }
-            cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+            showLessons(cached.filter { it.date == date }.sortedBy { it.time })
+            archiveNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
             scheduleNotifications()
         }
 
@@ -220,7 +231,6 @@ class MainViewModel : ViewModel() {
             ?.putString("selected_teacher", selectedTeacher)
             ?.putString("mode", mode)
             ?.putBoolean("dark_theme", darkTheme)
-            ?.putBoolean("auto_refresh", autoRefresh)
             ?.putBoolean(
                 "notifications",
                 notificationsEnabled
@@ -230,6 +240,7 @@ class MainViewModel : ViewModel() {
             ?.putBoolean("notify_after_long_window", notifyAfterLongWindow)
             ?.putString("theme_color", themeColor)
             ?.putString("language", language)
+            ?.putBoolean("full_schedule_translation", fullScheduleTranslation)
             ?.putStringSet("favorite_groups", favoriteGroups)
             ?.apply()
     }
@@ -247,11 +258,143 @@ class MainViewModel : ViewModel() {
     fun updateLanguage(value: String) {
         language = value
         saveSettings()
+        translationModelError = null
+        refreshTranslationModelStatus()
+        showLessons(allLessons.filter { it.date == date }.sortedBy { it.time })
     }
 
-    fun updateAutoRefresh(value: Boolean) {
-    autoRefresh = value
-    saveSettings()
+    fun refreshTranslationModelStatus() {
+        val targetLanguage = language
+        if (targetLanguage == "ru") {
+            translationModelDownloaded = true
+            modelDownloadInProgress = false
+            translationModelError = null
+            return
+        }
+        translationModelDownloaded = false
+        translationModelError = null
+        viewModelScope.launch {
+            try {
+                translationModelDownloaded =
+                    textTranslator?.isModelDownloaded(targetLanguage) == true
+            } catch (exception: Exception) {
+                translationModelDownloaded = false
+                appContext?.let { AppLogger.error(it, "Проверка языковой модели ($targetLanguage) завершилась ошибкой", exception) }
+            }
+        }
+    }
+
+    fun downloadTranslationModel() {
+        if (language == "ru" || modelDownloadInProgress) return
+        val targetLanguage = language
+        val translator = textTranslator ?: return
+        modelDownloadInProgress = true
+        translationModelError = null
+        appContext?.let { AppLogger.info(it, "Начата загрузка языковой модели: $targetLanguage") }
+        viewModelScope.launch {
+            try {
+                translator.downloadModel(targetLanguage)
+                translationModelDownloaded = translator.isModelDownloaded(targetLanguage)
+                if (!translationModelDownloaded) {
+                    throw IllegalStateException("Model download did not complete")
+                }
+                translationModelError = null
+                appContext?.let { AppLogger.info(it, "Языковая модель успешно загружена: $targetLanguage") }
+                if (translationModelDownloaded && fullScheduleTranslation) {
+                    showLessons(allLessons.filter { it.date == date }.sortedBy { it.time })
+                }
+            } catch (exception: Exception) {
+                translationModelDownloaded = false
+                appContext?.let { AppLogger.error(it, "Не удалось загрузить языковую модель: $targetLanguage", exception) }
+                translationModelError = when {
+                    exception.message?.contains("wifi", ignoreCase = true) == true ->
+                        localized(targetLanguage, "Для загрузки подключитесь к Wi-Fi и повторите попытку.", "Connect to Wi-Fi and try again.", "请连接 Wi-Fi 后重试。")
+                    else ->
+                        localized(targetLanguage, "Не удалось загрузить модель. Проверьте интернет и попробуйте ещё раз.", "Could not download the model. Check your connection and try again.", "无法下载模型。请检查网络后重试。")
+                }
+            } finally {
+                modelDownloadInProgress = false
+            }
+        }
+    }
+
+    fun updateFullScheduleTranslation(value: Boolean) {
+        fullScheduleTranslation = value
+        saveSettings()
+        showLessons(allLessons.filter { it.date == date }.sortedBy { it.time })
+    }
+
+    private fun showLessons(source: List<Lesson>) {
+        displayTranslationJob?.cancel()
+        lessons = source
+        if (!fullScheduleTranslation || language == "ru" || source.isEmpty()) return
+        val translator = textTranslator ?: return
+        val targetLanguage = language
+        AppLogger.info(appContext, "Начат перевод расписания: язык=$targetLanguage, занятий=${source.size}")
+        displayTranslationJob = viewModelScope.launch {
+            try {
+                if (!translator.isModelDownloaded(targetLanguage)) {
+                    AppLogger.warning(appContext, "Перевод отменён: языковая модель $targetLanguage не найдена")
+                    translationModelDownloaded = false
+                    cacheNotice = localized(
+                        targetLanguage,
+                        "Сначала скачайте языковую модель в настройках. Пока показан оригинальный текст.",
+                        "Download the language model in Settings first. The original text is shown for now.",
+                        "请先在设置中下载语言模型。目前显示原文。"
+                    )
+                    return@launch
+                }
+                translationModelDownloaded = true
+                val texts = source.flatMap { listOf(it.subject, it.teacher, it.type, it.room) }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                AppLogger.info(appContext, "Модель доступна. Уникальных элементов для перевода: ${texts.size}")
+                val translated = texts.associateWith {
+                    translator.translate(it, targetLanguage)
+                }
+                lessons = source.map { lesson ->
+                    lesson.copy(
+                        subject = translated[lesson.subject] ?: lesson.subject,
+                        teacher = translated[lesson.teacher] ?: lesson.teacher,
+                        type = translated[lesson.type] ?: lesson.type,
+                        room = translated[lesson.room] ?: lesson.room
+                    )
+                }
+                AppLogger.info(appContext, "Перевод расписания успешно завершён: $targetLanguage")
+            } catch (exception: Exception) {
+                AppLogger.error(appContext, "Ошибка перевода расписания: $targetLanguage", exception)
+                lessons = source
+                if (exception is TranslationModelFilesMissingException) {
+                    translationModelDownloaded = false
+                    translationModelError = localized(
+                        targetLanguage,
+                        "Файлы модели отсутствуют. Откройте настройки и нажмите «Скачать языковую модель», чтобы загрузить её заново по Wi-Fi.",
+                        "The model files are missing. Open Settings and tap “Download language model” to download it again over Wi-Fi.",
+                        "模型文件缺失。请打开设置并点击“下载语言模型”，通过 Wi-Fi 重新下载。"
+                    )
+                    AppLogger.warning(appContext, "Статус модели $targetLanguage сброшен. Ожидается ручная повторная загрузка пользователем.")
+                    cacheNotice = localized(
+                        targetLanguage,
+                        "Модель перевода восстановлена до состояния «не загружена». Исходный текст показан. Перейдите в настройки и скачайте модель заново.",
+                        "The translation model was reset to “not downloaded”. Original text is shown. Open Settings and download the model again.",
+                        "翻译模型状态已重置为“未下载”。当前显示原文。请打开设置重新下载模型。"
+                    )
+                } else {
+                    cacheNotice = localized(
+                        targetLanguage,
+                        "Не удалось выполнить перевод. Показан оригинальный текст.",
+                        "Translation failed. The original text is shown.",
+                        "翻译失败，当前显示原文。"
+                    )
+                }
+            }
+        }
+    }
+
+    override fun onCleared() {
+        displayTranslationJob?.cancel()
+        textTranslator?.close()
+        super.onCleared()
     }
 
     fun setNotifications(value: Boolean) {
@@ -287,6 +430,26 @@ class MainViewModel : ViewModel() {
         lessons = emptyList()
         cacheNotice = null
         error = "Кэш расписания очищен."
+    }
+
+    fun exportArchive(context: Context, folderUri: Uri) {
+        archiveExportStatus = localized(language, "Подготовка архива…", "Preparing archive…", "正在准备存档…")
+        viewModelScope.launch {
+            try {
+                val count = withContext(Dispatchers.IO) {
+                    ScheduleArchiveExporter.export(context.applicationContext, folderUri)
+                }
+                archiveExportStatus = if (count == 0) {
+                    localized(language, "Пока нечего экспортировать. Архив появится после сохранения расписания избранной группы.", "Nothing to export yet. The archive will appear after a favorite group's timetable is saved.", "暂无可导出的内容。收藏班级的课表保存后会出现在这里。")
+                } else {
+                    localized(language, "Экспортировано архивов: $count. Созданы файлы JSON и HTML.", "Exported archives: $count. JSON and HTML files were created.", "已导出 $count 个存档，已创建 JSON 和 HTML 文件。")
+                }
+                AppLogger.info(context, "Экспорт архива расписаний завершён: файлов расписаний=$count")
+            } catch (exception: Exception) {
+                archiveExportStatus = localized(language, "Не удалось сохранить архив. Проверьте разрешение на выбранную папку.", "Could not save the archive. Check access to the selected folder.", "无法保存存档。请检查所选文件夹的访问权限。")
+                AppLogger.error(context, "Ошибка экспорта архива расписаний", exception)
+            }
+        }
     }
 
     private fun scheduleNotifications() {
@@ -327,6 +490,20 @@ class MainViewModel : ViewModel() {
             }
 
         saveSettings()
+        if (cleanGroup in favoriteGroups) {
+            if (mode == "group" && selectedGroup == cleanGroup && allLessons.isNotEmpty()) {
+                saveGroupScheduleToCache(cleanGroup, allLessons)
+            } else {
+                viewModelScope.launch {
+                    try {
+                        val result = repository.loadGroup(cleanGroup)
+                        saveGroupScheduleToCache(cleanGroup, result)
+                    } catch (_: Exception) {
+                        // Расписание будет сохранено при следующем успешном обновлении.
+                    }
+                }
+            }
+        }
     }
 
     fun loadSuggestions(query: String) {
@@ -357,11 +534,11 @@ class MainViewModel : ViewModel() {
         suggestions = emptyList()
     }
 
-    private val cacheMaxAgeMs = 14L * 24L * 60L * 60L * 1000L
+    private val cacheRetentionDays = 30L
 
-    private fun cacheFile(): File? {
+    private fun cacheFile(groupOverride: String? = null): File? {
         val context = appContext ?: return null
-        val source = if (mode == "group") selectedGroup else selectedTeacher
+        val source = groupOverride ?: if (mode == "group") selectedGroup else selectedTeacher
         if (source.isBlank()) return null
 
         val hash = MessageDigest
@@ -374,16 +551,13 @@ class MainViewModel : ViewModel() {
             directory.mkdirs()
         }
 
-        return File(directory, "${mode}_$hash.json")
+        val cacheMode = if (groupOverride != null) "group" else mode
+        return File(directory, "${cacheMode}_$hash.json")
     }
 
-    private fun saveScheduleToCache(result: List<Lesson>) {
-        if (result.isEmpty()) return
-
-        val file = cacheFile() ?: return
+    private fun writeScheduleCache(file: File, lessons: List<Lesson>) {
         val array = JSONArray()
-
-        result.forEach { lesson ->
+        lessons.forEach { lesson ->
             array.put(
                 JSONObject().apply {
                     put("date", lesson.date.toString())
@@ -396,45 +570,59 @@ class MainViewModel : ViewModel() {
                 }
             )
         }
-
         try {
             val temporary = File(file.parentFile, "${file.name}.tmp")
             temporary.writeText(array.toString(), Charsets.UTF_8)
             if (file.exists()) file.delete()
             temporary.renameTo(file)
         } catch (_: Exception) {
-            // Кэш не должен ломать отображение расписания.
+            // Ошибка архива не должна ломать отображение расписания.
         }
     }
 
-    private fun loadScheduleFromCache(): List<Lesson>? {
-        val file = cacheFile() ?: return null
-        if (!file.exists()) return null
+    private fun saveScheduleToCache(result: List<Lesson>) {
+        if (mode != "group") return
+        saveGroupScheduleToCache(selectedGroup, result)
+    }
 
-        val age = System.currentTimeMillis() - file.lastModified()
-        if (age < 0L || age > cacheMaxAgeMs) {
-            file.delete()
-            return null
-        }
+    private fun saveGroupScheduleToCache(group: String, result: List<Lesson>) {
+        if (result.isEmpty() || group !in favoriteGroups) return
+        val file = cacheFile(group) ?: return
+        val merged = (loadScheduleFromCache(group).orEmpty() + result)
+            .filter { !it.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays)) }
+            .associateBy { "${it.date}|${it.time}" }
+            .values
+            .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
+        writeScheduleCache(file, merged)
+    }
+
+    private fun loadScheduleFromCache(groupOverride: String? = null): List<Lesson>? {
+        val file = cacheFile(groupOverride) ?: return null
+        if (!file.exists()) return null
 
         return try {
             val array = JSONArray(file.readText(Charsets.UTF_8))
-            buildList {
+            val loaded = buildList {
                 for (i in 0 until array.length()) {
                     val item = array.getJSONObject(i)
-                    add(
-                        Lesson(
-                            date = LocalDate.parse(item.getString("date")),
-                            time = item.optString("time"),
-                            subject = item.optString("subject"),
-                            teacher = item.optString("teacher"),
-                            type = item.optString("type"),
-                            room = item.optString("room"),
-                            group = item.optString("group")
-                        )
+                    val lesson = Lesson(
+                        date = LocalDate.parse(item.getString("date")),
+                        time = item.optString("time"),
+                        subject = item.optString("subject"),
+                        teacher = item.optString("teacher"),
+                        type = item.optString("type"),
+                        room = item.optString("room"),
+                        group = item.optString("group")
                     )
+                    if (!lesson.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays))) {
+                        add(lesson)
+                    }
                 }
             }
+            if (loaded.size != array.length()) {
+                writeScheduleCache(file, loaded)
+            }
+            loaded
         } catch (_: Exception) {
             null
         }
@@ -461,6 +649,7 @@ class MainViewModel : ViewModel() {
         loading = true
         error = null
         cacheNotice = null
+        archiveNotice = null
 
         viewModelScope.launch {
 
@@ -478,22 +667,28 @@ class MainViewModel : ViewModel() {
                     }
 
                 if (result.isNotEmpty()) {
-                    saveScheduleToCache(result)
-                    allLessons = result
-                    lessons = result
-                        .filter { it.date == date }
-                        .sortedBy { it.time }
-                    cacheNotice = null
+                    val archived = loadScheduleFromCache().orEmpty()
+                    val combined = (archived + result)
+                        .filter { !it.date.isBefore(LocalDate.now().minusDays(cacheRetentionDays)) }
+                        .associateBy { "${it.date}|${it.time}" }
+                        .values
+                        .sortedWith(compareBy<Lesson> { it.date }.thenBy { it.time })
+                    if (mode == "group" && favoriteGroups.contains(selectedGroup)) {
+                        saveScheduleToCache(result)
+                    }
+                    allLessons = combined
+                    showLessons(combined.filter { it.date == date }.sortedBy { it.time })
+                    archiveNotice = if (archived.isNotEmpty()) {
+                        "Сохранённые занятия объединены с актуальным расписанием. Архив хранится 30 дней."
+                    } else null
                     error = null
                     scheduleNotifications()
                 } else {
                     val cached = loadScheduleFromCache()
                     if (cached != null) {
                         allLessons = cached
-                        lessons = cached
-                            .filter { it.date == date }
-                            .sortedBy { it.time }
-                        cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+                        showLessons(cached.filter { it.date == date }.sortedBy { it.time })
+                        archiveNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
                         error = null
                         scheduleNotifications()
                     } else {
@@ -517,11 +712,9 @@ class MainViewModel : ViewModel() {
 
                 if (cached != null) {
                     allLessons = cached
-                    lessons = cached
-                        .filter { it.date == date }
-                        .sortedBy { it.time }
+                    showLessons(cached.filter { it.date == date }.sortedBy { it.time })
 
-                    cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+                    archiveNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
                     error = null
                     scheduleNotifications()
                 } else {
@@ -547,9 +740,7 @@ class MainViewModel : ViewModel() {
     fun changeDate(newDate: LocalDate) {
         date = newDate
         error = null
-        lessons = allLessons
-            .filter { it.date == newDate }
-            .sortedBy { it.time }
+        showLessons(allLessons.filter { it.date == newDate }.sortedBy { it.time })
     }
 
     fun selectMode(newMode: String) {
@@ -561,14 +752,13 @@ class MainViewModel : ViewModel() {
         lessons = emptyList()
         error = null
         cacheNotice = null
+        archiveNotice = null
 
         val cached = loadScheduleFromCache()
         if (cached != null) {
             allLessons = cached
-            lessons = cached
-                .filter { it.date == date }
-                .sortedBy { it.time }
-            cacheNotice = "Показано сохранённое расписание. Оно хранится 14 дней."
+            showLessons(cached.filter { it.date == date }.sortedBy { it.time })
+            archiveNotice = "Показано сохранённое расписание. Оно хранится 30 дней."
         }
 
         if (
@@ -667,6 +857,22 @@ fun App(
         mutableStateOf(false)
     }
 
+    val archiveFolderPicker = androidx.activity.compose.rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocumentTree()
+    ) { folderUri ->
+        if (folderUri != null) {
+            try {
+                context.contentResolver.takePersistableUriPermission(
+                    folderUri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                )
+                vm.exportArchive(context, folderUri)
+            } catch (exception: Exception) {
+                AppLogger.error(context, "Не удалось получить доступ к папке архива", exception)
+            }
+        }
+    }
+
     val snackbarHostState =
         remember {
             SnackbarHostState()
@@ -743,15 +949,15 @@ fun App(
 
                                 showSelector ->
                                     if (vm.mode == "group")
-                                        "Выбор группы"
+                                        localized(vm.language, "Выбор группы", "Select group", "选择班级")
                                     else
-                                        "Выбор преподавателя"
+                                        localized(vm.language, "Выбор преподавателя", "Select teacher", "选择教师")
 
                                 tab == 0 ->
-                                    "Timetable"
+                                    localized(vm.language, "Расписание", "Timetable", "课表")
 
                                 else ->
-                                    "Настройки"
+                                    localized(vm.language, "Настройки", "Settings", "设置")
                             }
                         )
                     },
@@ -771,7 +977,7 @@ fun App(
 
                                 Icon(
                                     Icons.Default.ArrowBack,
-                                    contentDescription = "Назад"
+                                    contentDescription = localized(vm.language, "Назад", "Back", "返回")
                                 )
                             }
                         }
@@ -792,7 +998,7 @@ fun App(
 
                                 Icon(
                                     Icons.Default.Refresh,
-                                    contentDescription = "Обновить"
+                                    contentDescription = localized(vm.language, "Обновить", "Refresh", "刷新")
                                 )
                             }
                         }
@@ -820,7 +1026,7 @@ fun App(
                                 )
                             },
                             label = {
-                                Text("Расписание")
+                                Text(localized(vm.language, "Расписание", "Timetable", "课表"))
                             }
                         )
 
@@ -836,7 +1042,7 @@ fun App(
                                 )
                             },
                             label = {
-                                Text("Настройки")
+                                Text(localized(vm.language, "Настройки", "Settings", "设置"))
                             }
                         )
                     }
@@ -880,7 +1086,11 @@ fun App(
                         onSelectTeacher = {
                             vm.selectMode("teacher")
                             showSelector = true
-                        },                    )
+                        },
+                        onExportArchive = {
+                            archiveFolderPicker.launch(null)
+                        }
+                    )
                 }
             }
         }
@@ -920,7 +1130,7 @@ fun ScheduleScreen(
                         showDatePicker = false
                     }
                 ) {
-                    Text("Выбрать")
+                    Text(localized(vm.language, "Выбрать", "Select", "选择"))
                 }
             },
             dismissButton = {
@@ -928,7 +1138,7 @@ fun ScheduleScreen(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
                     ),onClick = { showDatePicker = false }) {
-                    Text("Отмена")
+                    Text(localized(vm.language, "Отмена", "Cancel", "取消"))
                 }
             }
         ) {
@@ -964,7 +1174,7 @@ fun ScheduleScreen(
                         vm.selectMode("group")
                     },
                     label = {
-                        Text("👥 Группа")
+                        Text(localized(vm.language, "👥 Группа", "👥 Group", "👥 班级"))
                     }
                 )
 
@@ -974,7 +1184,7 @@ fun ScheduleScreen(
                         vm.selectMode("teacher")
                     },
                     label = {
-                        Text("👨‍🏫 Преподаватель")
+                        Text(localized(vm.language, "👨‍🏫 Преподаватель", "👨‍🏫 Teacher", "👨‍🏫 教师"))
                     }
                 )
             }
@@ -996,20 +1206,20 @@ fun ScheduleScreen(
                     ) {
                         Text(
                             if (vm.mode == "group")
-                                "Группа"
+                                localized(vm.language, "Группа", "Group", "班级")
                             else
-                                "Преподаватель",
+                                localized(vm.language, "Преподаватель", "Teacher", "教师"),
                             style = MaterialTheme.typography.labelMedium
                         )
 
                         Text(
                             if (vm.mode == "group") {
                                 vm.selectedGroup.ifBlank {
-                                    "Не выбрана"
+                                    localized(vm.language, "Не выбрана", "Not selected", "未选择")
                                 }
                             } else {
                                 vm.selectedTeacher.ifBlank {
-                                    "Не выбран"
+                                    localized(vm.language, "Не выбран", "Not selected", "未选择")
                                 }
                             },
                             style = MaterialTheme.typography.titleMedium,
@@ -1040,7 +1250,7 @@ fun ScheduleScreen(
                 ) {
                     Icon(
                         Icons.Default.ChevronLeft,
-                        "Предыдущий день"
+                        localized(vm.language, "Предыдущий день", "Previous day", "前一天")
                     )
                 }
 
@@ -1056,7 +1266,11 @@ fun ScheduleScreen(
                         vm.date.format(
                             DateTimeFormatter.ofPattern(
                                 "d MMMM, EEEE",
-                                Locale("ru")
+                                when (vm.language) {
+                                    "en" -> Locale.ENGLISH
+                                    "zh" -> Locale.SIMPLIFIED_CHINESE
+                                    else -> Locale("ru")
+                                }
                             )
                         )
                     )
@@ -1069,23 +1283,12 @@ fun ScheduleScreen(
                 ) {
                     Icon(
                         Icons.Default.ChevronRight,
-                        "Следующий день"
+                        localized(vm.language, "Следующий день", "Next day", "后一天")
                     )
                 }
             }
 
             HorizontalDivider()
-
-            if (vm.cacheNotice != null) {
-                Text(
-                    vm.cacheNotice ?: "",
-                    modifier = Modifier.padding(
-                        top = 8.dp,
-                        bottom = 4.dp
-                    ),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
 
             when {
                 vm.error != null -> {
@@ -1121,9 +1324,9 @@ fun ScheduleScreen(
                                 (vm.mode == "teacher" &&
                                     vm.selectedTeacher.isBlank())
                             ) {
-                                "Выберите группу или преподавателя"
+                                localized(vm.language, "Выберите группу или преподавателя", "Select a group or teacher", "请选择班级或教师")
                             } else {
-                                "На этот день занятий нет"
+                                localized(vm.language, "На этот день занятий нет", "No classes on this day", "这一天没有课程")
                             }
                         )
                     }
@@ -1135,7 +1338,7 @@ fun ScheduleScreen(
                         contentPadding = PaddingValues(vertical = 12.dp)
                     ) {
                         items(vm.lessons) {
-                            LessonCard(it)
+                            LessonCard(it, vm.language)
                         }
                     }
                 }
@@ -1146,7 +1349,8 @@ fun ScheduleScreen(
 
 @Composable
 fun LessonCard(
-    lesson: Lesson
+    lesson: Lesson,
+    language: String
 ) {
     var expanded by remember(lesson) { mutableStateOf(false) }
 
@@ -1197,7 +1401,7 @@ fun LessonCard(
                 if (lesson.room.isNotBlank()) Text("🏫 ${lesson.room}")
                 if (lesson.group.isNotBlank()) Text("👥 ${lesson.group}")
                 Text(
-                    "Нажмите, чтобы свернуть",
+                    localized(language, "Нажмите, чтобы свернуть", "Tap to collapse", "点击收起"),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 6.dp)
@@ -1369,7 +1573,7 @@ fun SelectorScreen(
                 Modifier.fillMaxWidth()
         ) {
 
-            Text("Выбрать")
+            Text(localized(vm.language, "Выбрать", "Select", "选择"))
         }
 
         if (vm.mode == "group" && vm.favoriteGroups.isNotEmpty()) {
@@ -1397,7 +1601,7 @@ fun SelectorScreen(
                         leadingContent = {
                             Icon(
                                 Icons.Default.Star,
-                                contentDescription = "Избранная группа"
+                                contentDescription = localized(vm.language, "Избранная группа", "Favorite group", "收藏的班级")
                             )
                         },
                         trailingContent = {
@@ -1408,7 +1612,7 @@ fun SelectorScreen(
                             ) {
                                 Icon(
                                     Icons.Default.Star,
-                                    contentDescription = "Убрать из избранного"
+                                    contentDescription = localized(vm.language, "Убрать из избранного", "Remove from favorites", "取消收藏")
                                 )
                             }
                         },
@@ -1478,7 +1682,8 @@ fun SettingsScreen(
     vm: MainViewModel,
     modifier: Modifier,
     onSelectGroup: () -> Unit,
-    onSelectTeacher: () -> Unit
+    onSelectTeacher: () -> Unit,
+    onExportArchive: () -> Unit
 ) {
     val context = LocalContext.current
     var versionTapCount by remember { mutableIntStateOf(0) }
@@ -1487,6 +1692,9 @@ fun SettingsScreen(
     var developerPassword by remember { mutableStateOf("") }
     var passwordError by remember { mutableStateOf(false) }
     var showTestUpdateBanner by remember { mutableStateOf(false) }
+    var developerLogsVisible by remember { mutableStateOf(false) }
+    var developerLogEntries by remember { mutableStateOf(emptyList<String>()) }
+    var selectedSettingsSection by remember { mutableStateOf<String?>(null) }
     
     Column(
         modifier
@@ -1497,7 +1705,63 @@ fun SettingsScreen(
             .padding(16.dp)
     ) {
 
-        if (vm.updateAvailable || showTestUpdateBanner) {
+        if (selectedSettingsSection == null) {
+            Spacer(Modifier.height(4.dp))
+            val sections = listOf(
+                Triple("appearance", "Оформление", "Appearance"),
+                Triple("language", "Язык", "Language"),
+                Triple("timetable", "Расписание", "Timetable"),
+                Triple("notifications", "Уведомления", "Notifications"),
+                Triple("archive", "Архив", "Archive")
+            )
+            sections.forEach { (key, russian, english) ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 10.dp).clickable { selectedSettingsSection = key },
+                    shape = MaterialTheme.shapes.large,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 17.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            Modifier.size(42.dp).background(MaterialTheme.colorScheme.secondaryContainer, MaterialTheme.shapes.medium),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                when (key) {
+                                    "appearance" -> Icons.Default.Palette
+                                    "language" -> Icons.Default.Language
+                                    "timetable" -> Icons.Default.DateRange
+                                    "notifications" -> Icons.Default.Notifications
+                                    else -> Icons.Default.Archive
+                                },
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        }
+                        Spacer(Modifier.width(14.dp))
+                        Text(
+                            localized(vm.language, russian, english, when (key) { "appearance" -> "外观"; "language" -> "语言"; "timetable" -> "课表"; "notifications" -> "通知"; else -> "存档" }),
+                            modifier = Modifier.weight(1f),
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        } else {
+            TextButton(onClick = { selectedSettingsSection = null }) {
+                Icon(Icons.Default.ArrowBack, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text(localized(vm.language, "Назад к настройкам", "Back to settings", "返回设置"))
+            }
+        }
+
+        if (selectedSettingsSection == null && (vm.updateAvailable || showTestUpdateBanner)) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1543,6 +1807,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(16.dp))
         }
 
+        if (selectedSettingsSection == "appearance") {
         Text(
             localized(vm.language, "Оформление", "Appearance", "外观"),
             style =
@@ -1677,6 +1942,9 @@ fun SettingsScreen(
             )
         )
 
+        }
+
+        if (selectedSettingsSection == "language") {
         var languageExpanded by remember { mutableStateOf(false) }
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(localized(vm.language, "Язык приложения", "App language", "应用语言"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -1701,8 +1969,111 @@ fun SettingsScreen(
                 DropdownMenuItem(text = { Text("简体中文") }, onClick = { vm.updateLanguage("zh"); languageExpanded = false })
             }
         }
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    localized(vm.language, "Полный перевод расписания", "Translate the entire timetable", "完整翻译课表"),
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    localized(vm.language, "Переводит предметы, преподавателей и аудитории. Модель загружается по Wi-Fi (около 30 МБ).", "Translates subjects, teachers and rooms. The model downloads over Wi-Fi (about 30 MB).", "翻译课程、教师和教室。模型通过 Wi-Fi 下载（约 30 MB）。"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Switch(
+                checked = vm.fullScheduleTranslation,
+                onCheckedChange = { vm.updateFullScheduleTranslation(it) }
+            )
+        }
+        if (vm.language != "ru") {
+            Spacer(Modifier.height(10.dp))
+            when {
+                vm.modelDownloadInProgress -> {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp
+                        )
+                        Text(
+                            localized(vm.language, "Загрузка языковой модели…", "Downloading language model…", "正在下载语言模型…"),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+                vm.translationModelDownloaded -> {
+                    Text(
+                        localized(vm.language, "Модель загружена. Всё готово!", "Model downloaded. You're all set!", "模型已下载，可以使用了！"),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+                else -> {
+                    Button(
+                        onClick = { vm.downloadTranslationModel() },
+                        enabled = !vm.modelDownloadInProgress,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(localized(vm.language, "Скачать языковую модель", "Download language model", "下载语言模型"))
+                    }
+                    Text(
+                        localized(vm.language, "Загрузка начнётся только после нажатия. Требуется Wi-Fi (около 30 МБ).", "The download starts only when you tap the button. Wi-Fi required (about 30 MB).", "仅在点击按钮后开始下载。需要 Wi-Fi（约 30 MB）。"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            vm.translationModelError?.let { message ->
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    message,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
         HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
+        }
+
+        if (selectedSettingsSection == "archive") {
+        Text(
+            localized(vm.language, "Архив расписаний", "Timetable archive", "课表存档"),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            localized(vm.language, "Экспортируйте архив избранных групп в выбранную папку. HTML удобно открывать, JSON подходит для резервного копирования.", "Export favorite-group archives to a folder you choose. HTML is easy to view; JSON is suitable for backup.", "将收藏班级的存档导出到所选文件夹。HTML 便于查看，JSON 适合备份。"),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Button(onClick = onExportArchive, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.FolderOpen, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(localized(vm.language, "Выбрать папку и экспортировать", "Choose folder and export", "选择文件夹并导出"))
+        }
+        vm.archiveExportStatus?.let { status ->
+            Text(status, style = MaterialTheme.typography.bodySmall)
+        }
+
+        HorizontalDivider(Modifier.padding(vertical = 16.dp))
+
+        }
+
+        if (selectedSettingsSection == "timetable") {
         Text(
             localized(vm.language, "Расписание", "Timetable", "课表"),
             style =
@@ -1711,10 +2082,26 @@ fun SettingsScreen(
                 FontWeight.Bold
         )
 
+        vm.archiveNotice?.let { notice ->
+            Card(
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 12.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+                    Spacer(Modifier.width(10.dp))
+                    Text(notice, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSecondaryContainer)
+                }
+            }
+        }
+
         ListItem(
 
             headlineContent = {
-                Text("Группа")
+                Text(localized(vm.language, "Группа", "Group", "班级"))
             },
 
             supportingContent = {
@@ -1755,13 +2142,13 @@ fun SettingsScreen(
             modifier =
                 Modifier.fillMaxWidth()
         ) {
-            Text("Изменить группу")
+            Text(localized(vm.language, "Изменить группу", "Change group", "更改班级"))
         }
 
         ListItem(
 
             headlineContent = {
-                Text("Преподаватель")
+                Text(localized(vm.language, "Преподаватель", "Teacher", "教师"))
             },
 
             supportingContent = {
@@ -1798,215 +2185,134 @@ fun SettingsScreen(
             modifier =
                 Modifier.fillMaxWidth()
         ) {
-            Text("Изменить преподавателя")
+            Text(localized(vm.language, "Изменить преподавателя", "Change teacher", "更改教师"))
         }
 
         Spacer(
             Modifier.height(12.dp)
         )
 
-        Row(
-            Modifier.fillMaxWidth(),
-            verticalAlignment =
-                Alignment.CenterVertically
-        ) {
+        }
 
-            Icon(
-                Icons.Default.Sync,
-                null
+        if (selectedSettingsSection == "notifications") {
+            Text(
+                localized(vm.language, "Уведомления", "Notifications", "通知"),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
             )
+            Spacer(Modifier.height(12.dp))
 
-            Spacer(
-                Modifier.width(16.dp)
-            )
-
-            Column(
-                Modifier.weight(1f)
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                shape = MaterialTheme.shapes.large
             ) {
-
-                Text(
-                    "Автообновление",
-                    fontWeight =
-                        FontWeight.Medium
-                )
-
-                Text(
-                    "Обновлять расписание автоматически"
-                )
-            }
-
-            Switch(
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
-                                        checkedBorderColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    checked =
-                    vm.autoRefresh,
-
-                onCheckedChange = {
-                    vm.updateAutoRefresh(it)
-                }
-            )
-        }
-
-        Spacer(
-            Modifier.height(12.dp)
-        )
-
-        var notificationDialogVisible by remember { mutableStateOf(false) }
-
-        ListItem(
-            headlineContent = { Text("Уведомления", fontWeight = FontWeight.Medium) },
-            supportingContent = {
-                Text(if (vm.notificationsEnabled) "Настроить напоминания о занятиях" else "Отключены")
-            },
-            leadingContent = { Icon(Icons.Default.Notifications, null) },
-            trailingContent = { Icon(Icons.Default.ChevronRight, null) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { notificationDialogVisible = true }
-        )
-
-        if (notificationDialogVisible) {
-            AlertDialog(
-                onDismissRequest = { notificationDialogVisible = false },
-                title = { Text("Уведомления") },
-                text = {
-                    Column {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Полное отключение")
-                                Text("Не получать напоминания о парах", style = MaterialTheme.typography.bodySmall)
-                            }
-                            Switch(
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
-                                        checkedBorderColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    checked = !vm.notificationsEnabled,
-                                onCheckedChange = { vm.setNotifications(!it) }
+                Column(Modifier.fillMaxWidth().padding(16.dp)) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(localized(vm.language, "Напоминания о занятиях", "Lesson reminders", "课程提醒"), fontWeight = FontWeight.Medium)
+                            Text(
+                                if (vm.notificationsEnabled) localized(vm.language, "Уведомления включены", "Notifications are enabled", "通知已开启")
+                                else localized(vm.language, "Уведомления отключены", "Notifications are disabled", "通知已关闭"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        Switch(
+                            checked = vm.notificationsEnabled,
+                            onCheckedChange = { vm.setNotifications(it) }
+                        )
+                    }
 
-                        Spacer(Modifier.height(12.dp))
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
 
-                        var leadExpanded by remember { mutableStateOf(false) }
-                        Box(Modifier.fillMaxWidth()) {
-                            OutlinedButton(
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary
-                ),
-                                onClick = { leadExpanded = true },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
-                                    Text("Время напоминания")
-                                    Text(
-                                        "За " + when (vm.notificationLeadMinutes) {
-                                            60 -> "1 час"
-                                            90 -> "1 ч 30 мин"
-                                            120 -> "2 часа"
-                                            else -> vm.notificationLeadMinutes.toString() + " мин"
-                                        },
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                }
-                                Icon(Icons.Default.ArrowDropDown, null)
+                    var leadExpanded by remember { mutableStateOf(false) }
+                    Box(Modifier.fillMaxWidth()) {
+                        OutlinedButton(
+                            onClick = { leadExpanded = true },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                        ) {
+                            Column(Modifier.weight(1f), horizontalAlignment = Alignment.Start) {
+                                Text(localized(vm.language, "Время напоминания", "Reminder time", "提醒时间"))
+                                Text(
+                                    localized(vm.language, "За ", " ", "提前 ") + when (vm.notificationLeadMinutes) {
+                                        60 -> localized(vm.language, "1 час", "1 hour", "1 小时")
+                                        90 -> localized(vm.language, "1 ч 30 мин", "1 hr 30 min", "1 小时 30 分钟")
+                                        120 -> localized(vm.language, "2 часа", "2 hours", "2 小时")
+                                        else -> vm.notificationLeadMinutes.toString() + localized(vm.language, " мин", " min", " 分钟")
+                                    },
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
-                            DropdownMenu(
-                                expanded = leadExpanded,
-                                onDismissRequest = { leadExpanded = false }
-                            ) {
-                                listOf(
-                                    5 to "5 минут",
-                                    10 to "10 минут",
-                                    15 to "15 минут",
-                                    30 to "30 минут",
-                                    60 to "1 час",
-                                    90 to "1 час 30 минут",
-                                    120 to "2 часа"
-                                ).forEach { (minutes, title) ->
-                                    DropdownMenuItem(
-                                        text = { Text(title) },
-                                        onClick = {
-                                            vm.updateNotificationLeadMinutes(minutes)
-                                            leadExpanded = false
-                                        }
-                                    )
-                                }
+                            Icon(Icons.Default.ArrowDropDown, null)
+                        }
+                        DropdownMenu(expanded = leadExpanded, onDismissRequest = { leadExpanded = false }) {
+                            listOf(
+                                5 to "5 минут", 10 to "10 минут", 15 to "15 минут",
+                                30 to "30 минут", 60 to "1 час", 90 to "1 час 30 минут", 120 to "2 часа"
+                            ).forEach { (minutes, title) ->
+                                DropdownMenuItem(
+                                    text = { Text(title) },
+                                    onClick = {
+                                        vm.updateNotificationLeadMinutes(minutes)
+                                        leadExpanded = false
+                                    }
+                                )
                             }
                         }
+                    }
 
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                            Spacer(Modifier.height(12.dp))
-                            OutlinedButton(
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.primary
-                ),
-                                onClick = {
-                                    val alarmManager = context.getSystemService(android.app.AlarmManager::class.java)
-                                    if (!alarmManager.canScheduleExactAlarms()) {
-                                        val settingsIntent = Intent(
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedButton(
+                            onClick = {
+                                val alarmManager = context.getSystemService(android.app.AlarmManager::class.java)
+                                if (!alarmManager.canScheduleExactAlarms()) {
+                                    context.startActivity(
+                                        Intent(
                                             Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
                                             Uri.parse("package:" + context.packageName)
                                         )
-                                        context.startActivity(settingsIntent)
-                                    } else {
-                                        vm.refreshNotifications()
-                                    }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text("Разрешить точные уведомления")
-                            }
-                            Text(
-                                "Разрешение помогает Android показывать напоминания ближе к выбранному времени.",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                                    )
+                                } else {
+                                    vm.refreshNotifications()
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
                         ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Уведомления между окнами")
-                                Text("Напоминать о паре после окна от 30 минут", style = MaterialTheme.typography.bodySmall)
-                            }
-                            Switch(
-                                    colors = SwitchDefaults.colors(
-                                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                                        checkedTrackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.38f),
-                                        checkedBorderColor = MaterialTheme.colorScheme.primary
-                                    ),
-                                    checked = vm.notifyAfterLongWindow,
-                                onCheckedChange = { vm.updateNotifyAfterLongWindow(it) }
+                            Text(localized(vm.language, "Разрешить точные уведомления", "Allow exact alarms", "允许精确提醒"))
+                        }
+                        Text(
+                            localized(vm.language, "Разрешение помогает Android показывать напоминания ближе к выбранному времени.", "This permission helps Android show reminders closer to the selected time.", "此权限有助于 Android 在设定时间附近显示提醒。"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    HorizontalDivider(Modifier.padding(vertical = 12.dp))
+
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(localized(vm.language, "Уведомления между окнами", "Reminders between classes", "课间提醒"))
+                            Text(
+                                localized(vm.language, "Напоминать о паре после окна от 30 минут", "Remind me about a class after a break of 30 minutes or more", "课间间隔达到 30 分钟时提醒"),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.primary
-                    ),onClick = { notificationDialogVisible = false }) {
-                        Text("Готово")
+                        Switch(
+                            checked = vm.notifyAfterLongWindow,
+                            onCheckedChange = { vm.updateNotifyAfterLongWindow(it) }
+                        )
                     }
                 }
-            )
+            }
+            Spacer(Modifier.height(16.dp))
         }
 
-        HorizontalDivider(
-            Modifier.padding(vertical = 16.dp)
-        )
-
+        if (selectedSettingsSection == null) {
         Text(
             localized(vm.language, "Полезное", "Links", "相关链接"),
             style = MaterialTheme.typography.titleMedium,
@@ -2027,7 +2333,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Telegram-канал ВВГУ Timetable")
+                    Icon(Icons.Default.Send, contentDescription = "VVSU Timetable Telegram channel")
                 }
                 Text("Telegram", style = MaterialTheme.typography.labelSmall)
             }
@@ -2038,9 +2344,9 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Language, contentDescription = "Официальный сайт ВВГУ")
+                    Icon(Icons.Default.Language, contentDescription = localized(vm.language, "Официальный сайт ВВГУ", "Official VVSU website", "ВВГУ 官方网站"))
                 }
-                Text("Сайт", style = MaterialTheme.typography.labelSmall)
+                Text(localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"), style = MaterialTheme.typography.labelSmall)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
@@ -2049,7 +2355,7 @@ fun SettingsScreen(
                     },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Code, contentDescription = "GitHub проекта")
+                    Icon(Icons.Default.Code, contentDescription = "Project GitHub")
                 }
                 Text("GitHub", style = MaterialTheme.typography.labelSmall)
             }
@@ -2062,7 +2368,7 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Default.Send, contentDescription = "Поддержка в Telegram")
                 }
-                Text("Поддержка", style = MaterialTheme.typography.labelSmall)
+                Text(localized(vm.language, "Поддержка", "Support", "支持"), style = MaterialTheme.typography.labelSmall)
             }
         }
 
@@ -2083,22 +2389,24 @@ fun SettingsScreen(
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
 
+        }
+
         if (passwordDialogVisible) {
             AlertDialog(
                 onDismissRequest = { passwordDialogVisible = false },
-                title = { Text("Режим разработчика") },
+                title = { Text(localized(vm.language, "Режим разработчика", "Developer mode", "开发者模式")) },
                 text = {
                     Column {
-                        Text("Введите пароль для доступа.")
+                        Text(localized(vm.language, "Введите пароль для доступа.", "Enter the access password.", "请输入访问密码。"))
                         Spacer(Modifier.height(8.dp))
                         OutlinedTextField(
                             value = developerPassword,
                             onValueChange = { developerPassword = it; passwordError = false },
-                            label = { Text("Пароль") },
+                            label = { Text(localized(vm.language, "Пароль", "Password", "密码")) },
                             singleLine = true,
                             isError = passwordError
                         )
-                        if (passwordError) Text("Неверный пароль", color = MaterialTheme.colorScheme.error)
+                        if (passwordError) Text(localized(vm.language, "Неверный пароль", "Incorrect password", "密码错误"), color = MaterialTheme.colorScheme.error)
                     }
                 },
                 confirmButton = {
@@ -2111,13 +2419,13 @@ fun SettingsScreen(
                             developerPassword = ""
                             developerModeVisible = true
                         } else passwordError = true
-                    }) { Text("Войти") }
+                    }) { Text(localized(vm.language, "Войти", "Sign in", "登录")) }
                 },
                 dismissButton = {
                     TextButton(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
-                    ),onClick = { passwordDialogVisible = false }) { Text("Отмена") }
+                    ),onClick = { passwordDialogVisible = false }) { Text(localized(vm.language, "Отмена", "Cancel", "取消")) }
                 }
             )
         }
@@ -2125,7 +2433,7 @@ fun SettingsScreen(
         if (developerModeVisible) {
             AlertDialog(
                 onDismissRequest = { developerModeVisible = false },
-                title = { Text("Инструменты разработчика") },
+                title = { Text(localized(vm.language, "Инструменты разработчика", "Developer tools", "开发者工具")) },
                 text = {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("Версия: ${BuildConfig.VERSION_NAME} (код ${BuildConfig.VERSION_CODE})")
@@ -2133,10 +2441,18 @@ fun SettingsScreen(
                         Text("Выбрано: " + if (vm.mode == "group") vm.selectedGroup.ifBlank { "нет" } else vm.selectedTeacher.ifBlank { "нет" })
                         Text("Занятий на выбранную дату: " + vm.lessons.size)
                         OutlinedButton(
+                            onClick = {
+                                developerLogEntries = vm.developerLogEntries()
+                                developerModeVisible = false
+                                developerLogsVisible = true
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Открыть журнал событий (${vm.developerLogEntries().size})") }
+                        OutlinedButton(
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.primary
                 ),onClick = { vm.loadSchedule() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Принудительно обновить расписание")
+                            Text(localized(vm.language, "Принудительно обновить расписание", "Force refresh timetable", "强制刷新课表"))
                         }
                         OutlinedButton(
                 colors = ButtonDefaults.outlinedButtonColors(
@@ -2154,13 +2470,13 @@ fun SettingsScreen(
                             onClick = { NotificationScheduler.showTestNotification(context) },
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Text("Принудительно вызвать уведомление")
+                            Text(localized(vm.language, "Принудительно вызвать уведомление", "Trigger a test notification", "触发测试通知"))
                         }
                         OutlinedButton(
                 colors = ButtonDefaults.outlinedButtonColors(
                     contentColor = MaterialTheme.colorScheme.primary
                 ),onClick = { vm.clearScheduleCache() }, modifier = Modifier.fillMaxWidth()) {
-                            Text("Очистить локальный кэш")
+                            Text(localized(vm.language, "Очистить локальный кэш", "Clear local cache", "清除本地缓存"))
                         }
                     }
                 },
@@ -2168,7 +2484,36 @@ fun SettingsScreen(
                     TextButton(
                     colors = ButtonDefaults.textButtonColors(
                         contentColor = MaterialTheme.colorScheme.primary
-                    ),onClick = { developerModeVisible = false }) { Text("Закрыть") }
+                    ),onClick = { developerModeVisible = false }) { Text(localized(vm.language, "Закрыть", "Close", "关闭")) }
+                }
+            )
+        }
+
+        if (developerLogsVisible) {
+            AlertDialog(
+                onDismissRequest = { developerLogsVisible = false; developerModeVisible = true },
+                title = { Text("Журнал событий") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Последние ${developerLogEntries.size} записей. Тексты расписания не сохраняются.")
+                        if (developerLogEntries.isEmpty()) Text("Записей пока нет.")
+                        else Column(Modifier.fillMaxWidth().heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            developerLogEntries.forEach { entry ->
+                                Text(entry, style = MaterialTheme.typography.bodySmall)
+                                HorizontalDivider()
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        TextButton(onClick = {
+                            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            clipboard.setPrimaryClip(ClipData.newPlainText("VVSU Timetable logs", developerLogEntries.joinToString("\n")))
+                        }) { Text("Копировать") }
+                        TextButton(onClick = { vm.clearDeveloperLogs(); developerLogEntries = emptyList() }) { Text("Очистить") }
+                        TextButton(onClick = { developerLogsVisible = false; developerModeVisible = true }) { Text("Назад") }
+                    }
                 }
             )
         }
