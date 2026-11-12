@@ -1695,6 +1695,7 @@ fun SettingsScreen(
     var developerLogsVisible by remember { mutableStateOf(false) }
     var developerLogEntries by remember { mutableStateOf(emptyList<String>()) }
     var selectedSettingsSection by remember { mutableStateOf<String?>(null) }
+    var showClearScheduleCacheDialog by remember { mutableStateOf(false) }
     
     Column(
         modifier
@@ -2186,6 +2187,67 @@ fun SettingsScreen(
                 Modifier.fillMaxWidth()
         ) {
             Text(localized(vm.language, "Изменить преподавателя", "Change teacher", "更改教师"))
+        }
+
+        Spacer(Modifier.height(16.dp))
+
+        OutlinedButton(
+            onClick = { showClearScheduleCacheDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.error
+            )
+        ) {
+            Icon(Icons.Default.DeleteSweep, contentDescription = null)
+            Spacer(Modifier.width(8.dp))
+            Text(localized(vm.language, "Очистить локальный кэш", "Clear local cache", "清除本地缓存"))
+        }
+
+        Text(
+            localized(
+                vm.language,
+                "Если у вас появились фантомные пары (пары, которых на самом деле нет), нажмите эту кнопку и обновите расписание.",
+                "If phantom classes appear (classes that are not actually scheduled), tap this button and refresh the timetable.",
+                "如果出现实际上并不存在的课程，请点击此按钮并刷新课表。"
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+        )
+
+        if (showClearScheduleCacheDialog) {
+            AlertDialog(
+                onDismissRequest = { showClearScheduleCacheDialog = false },
+                title = {
+                    Text(localized(vm.language, "Очистить локальный кэш?", "Clear local cache?", "清除本地缓存？"))
+                },
+                text = {
+                    Text(
+                        localized(
+                            vm.language,
+                            "Будут удалены сохранённые на устройстве данные расписания избранных групп. После очистки обновите расписание.",
+                            "Locally saved timetable data for favorite groups will be deleted. Refresh the timetable after clearing.",
+                            "将删除设备上保存的收藏班级课表数据。清理后请刷新课表。"
+                        )
+                    )
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            vm.clearScheduleCache()
+                            showClearScheduleCacheDialog = false
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text(localized(vm.language, "Очистить", "Clear", "清除"))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showClearScheduleCacheDialog = false }) {
+                        Text(localized(vm.language, "Отмена", "Cancel", "取消"))
+                    }
+                }
+            )
         }
 
         Spacer(
