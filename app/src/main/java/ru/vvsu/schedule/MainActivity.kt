@@ -1748,7 +1748,7 @@ fun SettingsScreen(
             .verticalScroll(
                 rememberScrollState()
             )
-            .padding(16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
     ) {
 
         if (selectedSettingsSection == null && (vm.updateAvailable || showTestUpdateBanner)) {
