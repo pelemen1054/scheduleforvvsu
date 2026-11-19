@@ -25,6 +25,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -82,6 +85,7 @@ class MainViewModel : ViewModel() {
     var date by mutableStateOf(LocalDate.now())
     
     var darkTheme by mutableStateOf(false)
+    var snowEnabled by mutableStateOf(false)
 
     var notificationsEnabled by mutableStateOf(true)
 
@@ -145,6 +149,7 @@ class MainViewModel : ViewModel() {
 
         darkTheme =
             p.getBoolean("dark_theme", false)
+        snowEnabled = p.getBoolean("snow_enabled", false)
 
         notificationsEnabled =
             p.getBoolean("notifications", true)
@@ -231,6 +236,7 @@ class MainViewModel : ViewModel() {
             ?.putString("selected_teacher", selectedTeacher)
             ?.putString("mode", mode)
             ?.putBoolean("dark_theme", darkTheme)
+            ?.putBoolean("snow_enabled", snowEnabled)
             ?.putBoolean(
                 "notifications",
                 notificationsEnabled
@@ -252,6 +258,11 @@ class MainViewModel : ViewModel() {
 
     fun updateThemeColor(value: String) {
         themeColor = value
+        saveSettings()
+    }
+
+    fun updateSnowEnabled(value: Boolean) {
+        snowEnabled = value
         saveSettings()
     }
 
@@ -1050,7 +1061,7 @@ fun App(
             }
 
         ) { padding ->
-
+            Box(Modifier.fillMaxSize()) {
             when {
 
                 showSelector -> {
@@ -1093,6 +1104,35 @@ fun App(
                     )
                 }
             }
+            if (vm.snowEnabled) SnowfallOverlay(Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+
+@Composable
+private fun SnowfallOverlay(modifier: Modifier = Modifier) {
+    val transition = rememberInfiniteTransition(label = "snowfall")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 14000, easing = LinearEasing)
+        ),
+        label = "snowfall-progress"
+    )
+    Canvas(modifier = modifier) {
+        val flakes = 42
+        for (i in 0 until flakes) {
+            val x = ((i * 7919L % 1000L).toFloat() / 1000f) * size.width
+            val startY = ((i * 3571L % 1000L).toFloat() / 1000f) * size.height
+            val y = (startY + progress * size.height * (0.7f + (i % 5) * 0.12f)) % size.height
+            val radius = 1.2f + (i % 4) * 0.45f
+            drawCircle(
+                color = Color.White.copy(alpha = 0.28f + (i % 4) * 0.1f),
+                radius = radius,
+                center = Offset(x, y)
+            )
         }
     }
 }
@@ -1707,7 +1747,7 @@ fun SettingsScreen(
     ) {
 
         if (selectedSettingsSection == null) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             val sections = listOf(
                 Triple("appearance", "Оформление", "Appearance"),
                 Triple("language", "Язык", "Language"),
@@ -1755,7 +1795,11 @@ fun SettingsScreen(
                 }
             }
         } else {
-            TextButton(onClick = { selectedSettingsSection = null }) {
+            TextButton(
+                modifier = Modifier.padding(top = 0.dp, bottom = 0.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                onClick = { selectedSettingsSection = null }
+            ) {
                 Icon(Icons.Default.ArrowBack, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(localized(vm.language, "Назад к настройкам", "Back to settings", "返回设置"))
@@ -1805,7 +1849,7 @@ fun SettingsScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(8.dp))
         }
 
         if (selectedSettingsSection == "appearance") {
@@ -1937,11 +1981,18 @@ fun SettingsScreen(
             }
         }
 
-        HorizontalDivider(
-            Modifier.padding(
-                vertical = 16.dp
-            )
-        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(localized(vm.language, "Снег", "Snowfall", "下雪效果"))
+                Text(localized(vm.language, "Декоративная анимация снежинок", "Decorative falling snow animation", "装饰性雪花动画"), style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked = vm.snowEnabled, onCheckedChange = vm::updateSnowEnabled)
+        }
+        HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
         }
 
@@ -2390,31 +2441,25 @@ fun SettingsScreen(
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/vvsut1metable")))
-                    },
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/vvsut1metable"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "VVSU Timetable Telegram channel")
+                    Icon(Icons.Default.Send, contentDescription = localized(vm.language, "Telegram-канал", "Telegram channel", "Telegram 频道"))
                 }
-                Text("Telegram", style = MaterialTheme.typography.labelSmall)
+                Text(localized(vm.language, "Telegram-канал", "Telegram channel", "Telegram 频道"), style = MaterialTheme.typography.labelSmall)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/")))
-                    },
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Language, contentDescription = localized(vm.language, "Официальный сайт ВВГУ", "Official VVSU website", "ВВГУ 官方网站"))
+                    Icon(Icons.Default.AccountBalance, contentDescription = localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"))
                 }
                 Text(localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"), style = MaterialTheme.typography.labelSmall)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/pelemen1054/scheduleforvvsu")))
-                    },
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/pelemen1054/scheduleforvvsu"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
                     Icon(Icons.Default.Code, contentDescription = "Project GitHub")
@@ -2423,14 +2468,21 @@ fun SettingsScreen(
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/VVSUTimtableSupportBot")))
-                    },
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/VVSUTimtableSupportBot"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Поддержка в Telegram")
+                    Icon(Icons.Default.HeadsetMic, contentDescription = localized(vm.language, "Поддержка", "Support", "支持"))
                 }
                 Text(localized(vm.language, "Поддержка", "Support", "支持"), style = MaterialTheme.typography.labelSmall)
+            }
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://t.me/tvoy_vvgu"))) },
+                    modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                ) {
+                    Icon(Icons.Default.Forum, contentDescription = localized(vm.language, "Чат ВВГУ", "VVSU chat", "ВВГУ 聊天群"))
+                }
+                Text(localized(vm.language, "Чат ВВГУ", "VVSU chat", "ВВГУ 聊天群"), style = MaterialTheme.typography.labelSmall)
             }
         }
 
