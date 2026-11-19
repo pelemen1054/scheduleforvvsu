@@ -26,6 +26,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.foundation.shape.CircleShape
@@ -1487,7 +1492,7 @@ fun SelectorScreen(
             .verticalScroll(
                 rememberScrollState()
             )
-            .padding(16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
     ) {
 
         ExposedDropdownMenuBox(
@@ -1746,6 +1751,53 @@ fun SettingsScreen(
             .padding(16.dp)
     ) {
 
+        if (selectedSettingsSection == null && (vm.updateAvailable || showTestUpdateBanner)) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
+                        )
+                    },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        if (showTestUpdateBanner && !vm.updateAvailable) "Тест: доступно обновление!" else localized(vm.language, "Доступна новая версия!", "Update available!", "发现新版本！"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        if (showTestUpdateBanner && !vm.updateAvailable) "Это тестовая плашка обновления." else localized(vm.language, "Версия ${vm.latestVersion} уже опубликована на GitHub.", "Version ${vm.latestVersion} is available on GitHub.", "版本 ${vm.latestVersion} 已在 GitHub 发布。"),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(
+                        onClick = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Text(localized(vm.language, "Скачать обновление", "Download update", "下载更新"))
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+
         if (selectedSettingsSection == null) {
             Spacer(Modifier.height(2.dp))
             val sections = listOf(
@@ -1806,51 +1858,6 @@ fun SettingsScreen(
             }
         }
 
-        if (selectedSettingsSection == null && (vm.updateAvailable || showTestUpdateBanner)) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
-                        )
-                    },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Column(
-                    Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        if (showTestUpdateBanner && !vm.updateAvailable) "Тест: доступно обновление!" else localized(vm.language, "Доступна новая версия!", "Update available!", "发现新版本！"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        if (showTestUpdateBanner && !vm.updateAvailable) "Это тестовая плашка обновления." else localized(vm.language, "Версия ${vm.latestVersion} уже опубликована на GitHub.", "Version ${vm.latestVersion} is available on GitHub.", "版本 ${vm.latestVersion} 已在 GitHub 发布。"),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Button(
-                        onClick = {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Text(localized(vm.language, "Скачать обновление", "Download update", "下载更新"))
-                    }
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-        }
 
         if (selectedSettingsSection == "appearance") {
         Text(
