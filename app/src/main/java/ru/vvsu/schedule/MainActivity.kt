@@ -2504,7 +2504,7 @@ fun SettingsScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(Modifier.height(84.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/vvsut1metable"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
@@ -2513,7 +2513,7 @@ fun SettingsScreen(
                 }
                 Text(localized(vm.language, "Канал\nприложения", "App\nchannel", "应用\n频道"), style = MaterialTheme.typography.labelSmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 12.sp)
             }
-            Column(Modifier.height(84.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
@@ -2522,7 +2522,7 @@ fun SettingsScreen(
                 }
                 Text(localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"), style = MaterialTheme.typography.labelSmall)
             }
-            Column(Modifier.height(84.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/pelemen1054/scheduleforvvsu"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
@@ -2531,7 +2531,7 @@ fun SettingsScreen(
                 }
                 Text("GitHub", style = MaterialTheme.typography.labelSmall)
             }
-            Column(Modifier.height(84.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/VVSUTimtableSupportBot"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
@@ -2540,7 +2540,7 @@ fun SettingsScreen(
                 }
                 Text(localized(vm.language, "Поддержка", "Support", "支持"), style = MaterialTheme.typography.labelSmall)
             }
-            Column(Modifier.height(84.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://t.me/tvoy_vvgu"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
