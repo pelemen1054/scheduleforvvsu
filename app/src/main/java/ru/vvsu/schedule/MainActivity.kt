@@ -1153,46 +1153,41 @@ private fun SnowfallOverlay(modifier: Modifier = Modifier, intensity: Int = 1) {
 }
 
 @Composable
-private fun VvsuSiteLogo() {
-    Canvas(Modifier.size(42.dp)) {
-        val blue = Color(0xFF3266A8)
-        val stroke = 1.6.dp.toPx()
-        // Three stylized university towers, based on the supplied VVSU logo.
+private fun VvsuSiteLogo(color: Color = MaterialTheme.colorScheme.onSecondaryContainer) {
+    Canvas(Modifier.size(24.dp)) {
+        // Simplified, monochrome Material-style version of the supplied VVSU emblem.
+        val stroke = 1.8.dp.toPx()
         val left = Path().apply {
-            moveTo(size.width * 0.18f, size.height * 0.60f)
-            lineTo(size.width * 0.34f, size.height * 0.52f)
-            lineTo(size.width * 0.34f, size.height * 0.80f)
-            lineTo(size.width * 0.18f, size.height * 0.84f)
+            moveTo(size.width * 0.12f, size.height * 0.56f)
+            lineTo(size.width * 0.30f, size.height * 0.48f)
+            lineTo(size.width * 0.30f, size.height * 0.78f)
+            lineTo(size.width * 0.12f, size.height * 0.82f)
             close()
         }
         val middle = Path().apply {
-            moveTo(size.width * 0.48f, size.height * 0.36f)
-            lineTo(size.width * 0.58f, size.height * 0.28f)
-            lineTo(size.width * 0.58f, size.height * 0.88f)
-            lineTo(size.width * 0.48f, size.height * 0.84f)
+            moveTo(size.width * 0.42f, size.height * 0.32f)
+            lineTo(size.width * 0.52f, size.height * 0.24f)
+            lineTo(size.width * 0.52f, size.height * 0.84f)
+            lineTo(size.width * 0.42f, size.height * 0.80f)
             close()
         }
         val right = Path().apply {
-            moveTo(size.width * 0.72f, size.height * 0.08f)
-            lineTo(size.width * 0.82f, size.height * 0.02f)
-            lineTo(size.width * 0.82f, size.height * 0.94f)
-            lineTo(size.width * 0.72f, size.height * 0.90f)
+            moveTo(size.width * 0.68f, size.height * 0.08f)
+            lineTo(size.width * 0.78f, size.height * 0.02f)
+            lineTo(size.width * 0.78f, size.height * 0.90f)
+            lineTo(size.width * 0.68f, size.height * 0.86f)
             close()
         }
-        drawPath(left, blue.copy(alpha = 0.18f))
-        drawPath(left, blue, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
-        drawPath(middle, blue.copy(alpha = 0.18f))
-        drawPath(middle, blue, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
-        drawPath(right, blue.copy(alpha = 0.18f))
-        drawPath(right, blue, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
-        val curve = Path().apply {
-            moveTo(size.width * 0.05f, size.height * 0.96f)
-            quadraticTo(size.width * 0.42f, size.height * 0.76f, size.width * 0.95f, size.height * 0.98f)
+        drawPath(left, color, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawPath(middle, color, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawPath(right, color, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        val base = Path().apply {
+            moveTo(size.width * 0.04f, size.height * 0.94f)
+            quadraticTo(size.width * 0.42f, size.height * 0.76f, size.width * 0.96f, size.height * 0.96f)
         }
-        drawPath(curve, blue, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+        drawPath(base, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
     }
 }
-
 @Composable
 fun ScheduleScreen(
     vm: MainViewModel,
@@ -2523,7 +2518,7 @@ fun SettingsScreen(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.AccountBalance, contentDescription = localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"))
+                    VvsuSiteLogo()
                 }
                 Text(localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"), style = MaterialTheme.typography.labelSmall)
             }
