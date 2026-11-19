@@ -91,6 +91,7 @@ class MainViewModel : ViewModel() {
     
     var darkTheme by mutableStateOf(false)
     var snowEnabled by mutableStateOf(false)
+    var snowIntensity by mutableStateOf(1)
 
     var notificationsEnabled by mutableStateOf(true)
 
@@ -155,6 +156,7 @@ class MainViewModel : ViewModel() {
         darkTheme =
             p.getBoolean("dark_theme", false)
         snowEnabled = p.getBoolean("snow_enabled", false)
+        snowIntensity = p.getInt("snow_intensity", 1).coerceIn(1, 3)
 
         notificationsEnabled =
             p.getBoolean("notifications", true)
@@ -242,6 +244,7 @@ class MainViewModel : ViewModel() {
             ?.putString("mode", mode)
             ?.putBoolean("dark_theme", darkTheme)
             ?.putBoolean("snow_enabled", snowEnabled)
+            ?.putInt("snow_intensity", snowIntensity)
             ?.putBoolean(
                 "notifications",
                 notificationsEnabled
@@ -268,6 +271,11 @@ class MainViewModel : ViewModel() {
 
     fun updateSnowEnabled(value: Boolean) {
         snowEnabled = value
+        saveSettings()
+    }
+
+    fun updateSnowIntensity(value: Int) {
+        snowIntensity = value.coerceIn(1, 3)
         saveSettings()
     }
 
@@ -1109,14 +1117,14 @@ fun App(
                     )
                 }
             }
-            if (vm.snowEnabled) SnowfallOverlay(Modifier.fillMaxSize())
+            if (vm.snowEnabled) SnowfallOverlay(Modifier.fillMaxSize(), vm.snowIntensity)
             }
         }
     }
 }
 
 @Composable
-private fun SnowfallOverlay(modifier: Modifier = Modifier) {
+private fun SnowfallOverlay(modifier: Modifier = Modifier, intensity: Int = 1) {
     val transition = rememberInfiniteTransition(label = "snowfall")
     val progress by transition.animateFloat(
         initialValue = 0f,
@@ -1127,7 +1135,7 @@ private fun SnowfallOverlay(modifier: Modifier = Modifier) {
         label = "snowfall-progress"
     )
     Canvas(modifier = modifier) {
-        val flakes = 42
+        val flakes = when (intensity.coerceIn(1, 3)) { 1 -> 42; 2 -> 78; else -> 125 }
         for (i in 0 until flakes) {
             val x = ((i * 7919L % 1000L).toFloat() / 1000f) * size.width
             val startY = ((i * 3571L % 1000L).toFloat() / 1000f) * size.height
@@ -1139,6 +1147,47 @@ private fun SnowfallOverlay(modifier: Modifier = Modifier) {
                 center = Offset(x, y)
             )
         }
+    }
+}
+
+@Composable
+private fun VvsuSiteLogo() {
+    Canvas(Modifier.size(42.dp)) {
+        val blue = Color(0xFF3266A8)
+        val stroke = 1.6.dp.toPx()
+        // Three stylized university towers, based on the supplied VVSU logo.
+        val left = Path().apply {
+            moveTo(size.width * 0.18f, size.height * 0.60f)
+            lineTo(size.width * 0.34f, size.height * 0.52f)
+            lineTo(size.width * 0.34f, size.height * 0.80f)
+            lineTo(size.width * 0.18f, size.height * 0.84f)
+            close()
+        }
+        val middle = Path().apply {
+            moveTo(size.width * 0.48f, size.height * 0.36f)
+            lineTo(size.width * 0.58f, size.height * 0.28f)
+            lineTo(size.width * 0.58f, size.height * 0.88f)
+            lineTo(size.width * 0.48f, size.height * 0.84f)
+            close()
+        }
+        val right = Path().apply {
+            moveTo(size.width * 0.72f, size.height * 0.08f)
+            lineTo(size.width * 0.82f, size.height * 0.02f)
+            lineTo(size.width * 0.82f, size.height * 0.94f)
+            lineTo(size.width * 0.72f, size.height * 0.90f)
+            close()
+        }
+        drawPath(left, blue.copy(alpha = 0.18f))
+        drawPath(left, blue, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawPath(middle, blue.copy(alpha = 0.18f))
+        drawPath(middle, blue, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawPath(right, blue.copy(alpha = 0.18f))
+        drawPath(right, blue, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        val curve = Path().apply {
+            moveTo(size.width * 0.05f, size.height * 0.96f)
+            quadraticTo(size.width * 0.42f, size.height * 0.76f, size.width * 0.95f, size.height * 0.98f)
+        }
+        drawPath(curve, blue, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
     }
 }
 
@@ -1860,6 +1909,7 @@ fun SettingsScreen(
 
 
         if (selectedSettingsSection == "appearance") {
+        Spacer(Modifier.height(0.dp))
         Text(
             localized(vm.language, "Оформление", "Appearance", "外观"),
             style =
@@ -1998,6 +2048,17 @@ fun SettingsScreen(
                 Text(localized(vm.language, "Декоративная анимация снежинок", "Decorative falling snow animation", "装饰性雪花动画"), style = MaterialTheme.typography.bodySmall)
             }
             Switch(checked = vm.snowEnabled, onCheckedChange = vm::updateSnowEnabled)
+        }
+        if (vm.snowEnabled) {
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Text(localized(vm.language, "Интенсивность снегопада", "Snowfall intensity", "降雪强度"))
+                Slider(value = vm.snowIntensity.toFloat(), onValueChange = { vm.updateSnowIntensity(it.toInt()) }, valueRange = 1f..3f, steps = 1)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("1", style = MaterialTheme.typography.labelSmall)
+                    Text("2", style = MaterialTheme.typography.labelSmall)
+                    Text("3", style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
         HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
@@ -2453,14 +2514,14 @@ fun SettingsScreen(
                 ) {
                     Icon(Icons.Default.Send, contentDescription = localized(vm.language, "Telegram-канал", "Telegram channel", "Telegram 频道"))
                 }
-                Text(localized(vm.language, "Telegram-канал", "Telegram channel", "Telegram 频道"), style = MaterialTheme.typography.labelSmall)
+                Text(localized(vm.language, "Канал\nприложения", "App\nchannel", "应用\n频道"), style = MaterialTheme.typography.labelSmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 12.sp)
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 IconButton(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.AccountBalance, contentDescription = localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"))
+                    VvsuSiteLogo()
                 }
                 Text(localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"), style = MaterialTheme.typography.labelSmall)
             }
