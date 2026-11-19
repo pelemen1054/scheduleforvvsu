@@ -2540,7 +2540,7 @@ fun SettingsScreen(
                 }
                 Text(localized(vm.language, "Поддержка", "Support", "支持"), style = MaterialTheme.typography.labelSmall)
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.height(84.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceBetween) {
                 IconButton(
                     onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://t.me/tvoy_vvgu"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
