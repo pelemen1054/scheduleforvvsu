@@ -141,6 +141,25 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         val source = text.trim()
         if (source.isBlank() || language == "ru") return text
 
+        // Keep common timetable terms consistent in Simplified Chinese instead of
+        // relying on context-free machine translation for short academic labels.
+        if (language == "zh") {
+            val term = when (source.lowercase()) {
+                "лекция" -> "讲座"
+                "практика", "практическое занятие" -> "实践课"
+                "лабораторная работа", "лабораторная" -> "实验课"
+                "семинар" -> "研讨课"
+                "экзамен" -> "考试"
+                "зачёт", "зачет" -> "考核"
+                "преподаватель" -> "教师"
+                "аудитория" -> "教室"
+                "корпус" -> "教学楼"
+                "дистанционно" -> "线上"
+                else -> null
+            }
+            if (term != null) return term
+        }
+
         val key = cacheKey(language, source)
         preferences.getString(key, null)?.let { return it }
 
@@ -205,7 +224,7 @@ class ScheduleTextTranslator(context: Context) : Closeable {
         val digest = MessageDigest.getInstance("SHA-256")
             .digest(text.toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
-        return "${language}_${digest}"
+        return "v2_${language}_${digest}"
     }
 
     override fun close() {
