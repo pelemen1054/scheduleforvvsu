@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -1897,8 +1898,8 @@ fun SettingsScreen(
             }
         } else {
             TextButton(
-                modifier = Modifier.padding(top = 0.dp, bottom = 0.dp),
-                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 2.dp),
+                modifier = Modifier.height(34.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
                 onClick = { selectedSettingsSection = null }
             ) {
                 Icon(Icons.Default.ArrowBack, contentDescription = null)
