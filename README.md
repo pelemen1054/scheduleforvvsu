@@ -1,12 +1,12 @@
 # ВВГУ Timetable
 
-**Текущая версия: 1.0.9**
+**Текущая версия: 1.1.2**
 
 Удобное Android-приложение для просмотра расписания ВВГУ. Выбирай свою группу или преподавателя, смотри занятия на нужную дату и настраивай напоминания, чтобы ничего не пропустить.
 
 ## 📥 Скачать приложение
 
-**[Скачать последнюю версию ВВГУ Timetable](https://github.com/pelemen1054/scheduleforvvsu/releases/latest/download/VVSU_timetable_v1.0.9.apk)**
+**[Скачать последнюю версию ВВГУ Timetable](https://github.com/pelemen1054/scheduleforvvsu/releases/latest/download/VVSU_timetable_v1.1.2.apk)**
 
 [Все версии и журнал изменений](https://github.com/pelemen1054/scheduleforvvsu/releases)
 
