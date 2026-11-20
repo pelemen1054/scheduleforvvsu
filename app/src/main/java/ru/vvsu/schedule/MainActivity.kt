@@ -25,6 +25,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -40,9 +48,11 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -82,6 +92,8 @@ class MainViewModel : ViewModel() {
     var date by mutableStateOf(LocalDate.now())
     
     var darkTheme by mutableStateOf(false)
+    var snowEnabled by mutableStateOf(false)
+    var snowIntensity by mutableStateOf(1)
 
     var notificationsEnabled by mutableStateOf(true)
 
@@ -145,6 +157,8 @@ class MainViewModel : ViewModel() {
 
         darkTheme =
             p.getBoolean("dark_theme", false)
+        snowEnabled = p.getBoolean("snow_enabled", false)
+        snowIntensity = p.getInt("snow_intensity", 1).coerceIn(1, 3)
 
         notificationsEnabled =
             p.getBoolean("notifications", true)
@@ -231,6 +245,8 @@ class MainViewModel : ViewModel() {
             ?.putString("selected_teacher", selectedTeacher)
             ?.putString("mode", mode)
             ?.putBoolean("dark_theme", darkTheme)
+            ?.putBoolean("snow_enabled", snowEnabled)
+            ?.putInt("snow_intensity", snowIntensity)
             ?.putBoolean(
                 "notifications",
                 notificationsEnabled
@@ -252,6 +268,16 @@ class MainViewModel : ViewModel() {
 
     fun updateThemeColor(value: String) {
         themeColor = value
+        saveSettings()
+    }
+
+    fun updateSnowEnabled(value: Boolean) {
+        snowEnabled = value
+        saveSettings()
+    }
+
+    fun updateSnowIntensity(value: Int) {
+        snowIntensity = value.coerceIn(1, 3)
         saveSettings()
     }
 
@@ -1050,7 +1076,7 @@ fun App(
             }
 
         ) { padding ->
-
+            Box(Modifier.fillMaxSize()) {
             when {
 
                 showSelector -> {
@@ -1093,10 +1119,75 @@ fun App(
                     )
                 }
             }
+            if (vm.snowEnabled) SnowfallOverlay(Modifier.fillMaxSize(), vm.snowIntensity)
+            }
         }
     }
 }
 
+@Composable
+private fun SnowfallOverlay(modifier: Modifier = Modifier, intensity: Int = 1) {
+    val transition = rememberInfiniteTransition(label = "snowfall")
+    val progress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 14000, easing = LinearEasing)
+        ),
+        label = "snowfall-progress"
+    )
+    Canvas(modifier = modifier) {
+        val flakes = when (intensity.coerceIn(1, 3)) { 1 -> 42; 2 -> 78; else -> 125 }
+        for (i in 0 until flakes) {
+            val x = ((i * 7919L % 1000L).toFloat() / 1000f) * size.width
+            val startY = ((i * 3571L % 1000L).toFloat() / 1000f) * size.height
+            val y = (startY + progress * size.height * (0.7f + (i % 5) * 0.12f)) % size.height
+            val radius = 1.2f + (i % 4) * 0.45f
+            drawCircle(
+                color = Color.White.copy(alpha = 0.28f + (i % 4) * 0.1f),
+                radius = radius,
+                center = Offset(x, y)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VvsuSiteLogo(color: Color = MaterialTheme.colorScheme.onSecondaryContainer) {
+    Canvas(Modifier.size(24.dp)) {
+        // Simplified, monochrome Material-style version of the supplied VVSU emblem.
+        val stroke = 1.8.dp.toPx()
+        val left = Path().apply {
+            moveTo(size.width * 0.12f, size.height * 0.56f)
+            lineTo(size.width * 0.30f, size.height * 0.48f)
+            lineTo(size.width * 0.30f, size.height * 0.78f)
+            lineTo(size.width * 0.12f, size.height * 0.82f)
+            close()
+        }
+        val middle = Path().apply {
+            moveTo(size.width * 0.42f, size.height * 0.32f)
+            lineTo(size.width * 0.52f, size.height * 0.24f)
+            lineTo(size.width * 0.52f, size.height * 0.84f)
+            lineTo(size.width * 0.42f, size.height * 0.80f)
+            close()
+        }
+        val right = Path().apply {
+            moveTo(size.width * 0.68f, size.height * 0.08f)
+            lineTo(size.width * 0.78f, size.height * 0.02f)
+            lineTo(size.width * 0.78f, size.height * 0.90f)
+            lineTo(size.width * 0.68f, size.height * 0.86f)
+            close()
+        }
+        drawPath(left, color, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawPath(middle, color, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        drawPath(right, color, style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        val base = Path().apply {
+            moveTo(size.width * 0.04f, size.height * 0.94f)
+            quadraticTo(size.width * 0.42f, size.height * 0.76f, size.width * 0.96f, size.height * 0.96f)
+        }
+        drawPath(base, color, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 2.dp.toPx()))
+    }
+}
 @Composable
 fun ScheduleScreen(
     vm: MainViewModel,
@@ -1447,7 +1538,7 @@ fun SelectorScreen(
             .verticalScroll(
                 rememberScrollState()
             )
-            .padding(16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
     ) {
 
         ExposedDropdownMenuBox(
@@ -1703,11 +1794,58 @@ fun SettingsScreen(
             .verticalScroll(
                 rememberScrollState()
             )
-            .padding(16.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 16.dp)
     ) {
 
+        if (selectedSettingsSection == null && (vm.updateAvailable || showTestUpdateBanner)) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        context.startActivity(
+                            Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
+                        )
+                    },
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer
+                )
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        if (showTestUpdateBanner && !vm.updateAvailable) "Тест: доступно обновление!" else localized(vm.language, "Доступна новая версия!", "Update available!", "发现新版本！"),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        if (showTestUpdateBanner && !vm.updateAvailable) "Это тестовая плашка обновления." else localized(vm.language, "Версия ${vm.latestVersion} уже опубликована на GitHub.", "Version ${vm.latestVersion} is available on GitHub.", "版本 ${vm.latestVersion} 已在 GitHub 发布。"),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                    Button(
+                        onClick = {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    ) {
+                        Text(localized(vm.language, "Скачать обновление", "Download update", "下载更新"))
+                    }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+        }
+
+
         if (selectedSettingsSection == null) {
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(2.dp))
             val sections = listOf(
                 Triple("appearance", "Оформление", "Appearance"),
                 Triple("language", "Язык", "Language"),
@@ -1755,60 +1893,20 @@ fun SettingsScreen(
                 }
             }
         } else {
-            TextButton(onClick = { selectedSettingsSection = null }) {
+            TextButton(
+                modifier = Modifier.height(34.dp),
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                onClick = { selectedSettingsSection = null }
+            ) {
                 Icon(Icons.Default.ArrowBack, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
                 Text(localized(vm.language, "Назад к настройкам", "Back to settings", "返回设置"))
             }
         }
 
-        if (selectedSettingsSection == null && (vm.updateAvailable || showTestUpdateBanner)) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        context.startActivity(
-                            Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
-                        )
-                    },
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                )
-            ) {
-                Column(
-                    Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        if (showTestUpdateBanner && !vm.updateAvailable) "Тест: доступно обновление!" else localized(vm.language, "Доступна новая версия!", "Update available!", "发现新版本！"),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        if (showTestUpdateBanner && !vm.updateAvailable) "Это тестовая плашка обновления." else localized(vm.language, "Версия ${vm.latestVersion} уже опубликована на GitHub.", "Version ${vm.latestVersion} is available on GitHub.", "版本 ${vm.latestVersion} 已在 GitHub 发布。"),
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    Button(
-                        onClick = {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(vm.latestReleaseUrl))
-                            )
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    ) {
-                        Text(localized(vm.language, "Скачать обновление", "Download update", "下载更新"))
-                    }
-                }
-            }
-            Spacer(Modifier.height(16.dp))
-        }
 
         if (selectedSettingsSection == "appearance") {
+        Spacer(Modifier.height(0.dp))
         Text(
             localized(vm.language, "Оформление", "Appearance", "外观"),
             style =
@@ -1937,11 +2035,29 @@ fun SettingsScreen(
             }
         }
 
-        HorizontalDivider(
-            Modifier.padding(
-                vertical = 16.dp
-            )
-        )
+        Spacer(Modifier.height(12.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(localized(vm.language, "Снег", "Snowfall", "下雪效果"))
+                Text(localized(vm.language, "Декоративная анимация снежинок", "Decorative falling snow animation", "装饰性雪花动画"), style = MaterialTheme.typography.bodySmall)
+            }
+            Switch(checked = vm.snowEnabled, onCheckedChange = vm::updateSnowEnabled)
+        }
+        if (vm.snowEnabled) {
+            Column(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                Text(localized(vm.language, "Интенсивность снегопада", "Snowfall intensity", "降雪强度"))
+                Slider(value = vm.snowIntensity.toFloat(), onValueChange = { vm.updateSnowIntensity(it.toInt()) }, valueRange = 1f..3f, steps = 1)
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text("1", style = MaterialTheme.typography.labelSmall)
+                    Text("2", style = MaterialTheme.typography.labelSmall)
+                    Text("3", style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+        HorizontalDivider(Modifier.padding(vertical = 16.dp))
 
         }
 
@@ -2388,49 +2504,50 @@ fun SettingsScreen(
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/vvsut1metable")))
-                    },
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/vvsut1metable"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "VVSU Timetable Telegram channel")
+                    Icon(Icons.Default.Send, contentDescription = localized(vm.language, "Telegram-канал", "Telegram channel", "Telegram 频道"))
                 }
-                Text("Telegram", style = MaterialTheme.typography.labelSmall)
+                Text(localized(vm.language, "Канал\nприложения", "App\nchannel", "应用\n频道"), style = MaterialTheme.typography.labelSmall, textAlign = androidx.compose.ui.text.style.TextAlign.Center, lineHeight = 12.sp)
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/")))
-                    },
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.vvsu.ru/"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Language, contentDescription = localized(vm.language, "Официальный сайт ВВГУ", "Official VVSU website", "ВВГУ 官方网站"))
+                    VvsuSiteLogo()
                 }
                 Text(localized(vm.language, "Сайт ВВГУ", "VVSU website", "ВВГУ 网站"), style = MaterialTheme.typography.labelSmall)
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/pelemen1054/scheduleforvvsu")))
-                    },
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/pelemen1054/scheduleforvvsu"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
                     Icon(Icons.Default.Code, contentDescription = "Project GitHub")
                 }
                 Text("GitHub", style = MaterialTheme.typography.labelSmall)
             }
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 IconButton(
-                    onClick = {
-                        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/VVSUTimtableSupportBot")))
-                    },
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://t.me/VVSUTimtableSupportBot"))) },
                     modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Поддержка в Telegram")
+                    Icon(Icons.Default.HeadsetMic, contentDescription = localized(vm.language, "Поддержка", "Support", "支持"))
                 }
                 Text(localized(vm.language, "Поддержка", "Support", "支持"), style = MaterialTheme.typography.labelSmall)
+            }
+            Column(Modifier.height(84.dp).padding(top = 10.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                IconButton(
+                    onClick = { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("http://t.me/tvoy_vvgu"))) },
+                    modifier = Modifier.size(48.dp).background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+                ) {
+                    Icon(Icons.Default.Forum, contentDescription = localized(vm.language, "Чат ВВГУ", "VVSU chat", "ВВГУ 聊天群"))
+                }
+                Text(localized(vm.language, "Чат ВВГУ", "VVSU chat", "ВВГУ 聊天群"), style = MaterialTheme.typography.labelSmall)
             }
         }
 
